@@ -1,0 +1,481 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true });</script>
+<title>Survival mode — як воно влаштоване</title>
+
+<style>
+  :root {
+    --ground: #0e1420; --surface: #161d2c; --surface-2: #1d2536; --line: #2a3346;
+    --ink: #e8edf7; --ink-dim: #8a96ac;
+    --client: #e9b44c; --server: #4fb6a8; --danger: #e4675f; --ok: #57c98a;
+    --diagram-bg: #f7f9fc;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #f6f7fa; --surface: #ffffff; --surface-2: #eef1f6; --line: #d8dee9;
+      --ink: #131a26; --ink-dim: #5d6879;
+      --client: #a9761a; --server: #1c7f72; --danger: #c04036; --ok: #23794f;
+      --diagram-bg: #ffffff;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f7fa; --surface: #ffffff; --surface-2: #eef1f6; --line: #d8dee9;
+    --ink: #131a26; --ink-dim: #5d6879;
+    --client: #a9761a; --server: #1c7f72; --danger: #c04036; --ok: #23794f;
+    --diagram-bg: #ffffff;
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1420; --surface: #161d2c; --surface-2: #1d2536; --line: #2a3346;
+    --ink: #e8edf7; --ink-dim: #8a96ac;
+    --client: #e9b44c; --server: #4fb6a8; --danger: #e4675f; --ok: #57c98a;
+    --diagram-bg: #f7f9fc;
+  }
+
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 24px 96px; }
+  .mono, code, pre, th, .eyebrow, .port, h1, h2, h3 {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  header.top { border-bottom: 2px solid var(--line); padding-bottom: 28px; margin-bottom: 40px; }
+  .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 12px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0 0 14px; text-wrap: balance; letter-spacing: -.02em; }
+  .lede { font-size: 18px; color: var(--ink-dim); max-width: 62ch; margin: 0; }
+  section { margin: 56px 0 0; }
+  h2 { font-size: 20px; margin: 0 0 6px; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 12px; }
+  h2 .num { font-size: 12px; color: var(--client); border: 1px solid var(--line); padding: 2px 8px; border-radius: 4px; letter-spacing: .05em; }
+  h3 { font-size: 15px; margin: 32px 0 8px; color: var(--ink); }
+  p { max-width: 68ch; }
+  .sub { color: var(--ink-dim); margin: 0 0 22px; max-width: 68ch; }
+  code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: .88em; border: 1px solid var(--line); }
+  pre.block { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+  pre.block code { background: none; border: none; padding: 0; }
+  .diagram { background: var(--diagram-bg); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 20px 0; overflow-x: auto; }
+  .diagram pre { margin: 0; }
+  /* The artifact runtime's dark mode paints edge-label text white via its own stylesheet,
+     ignoring mermaid themeVariables. Diagrams here are deliberately light panels in both
+     themes, so pin edge labels to dark-on-white — and only them: node/actor labels stay
+     white on their dark fills. */
+  .diagram .edgeLabel, .diagram .edgeLabel p, .diagram .edgeLabel span, .diagram .edgeLabel div {
+    color: #1a2230 !important;
+  }
+  .diagram .edgeLabel { background-color: #ffffff !important; }
+  .diagram .edgeLabel .labelBkg, .diagram .edgeLabel rect { fill: #ffffff !important; }
+  .diagram svg .edgeLabel text { fill: #1a2230 !important; }
+  .caption { color: var(--ink-dim); font-size: 13px; margin: -8px 0 26px; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-dim); font-weight: 500; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; }
+  td.num, .tabular { font-variant-numeric: tabular-nums; }
+  .scroll-x { overflow-x: auto; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 22px 0 8px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .card h4 { margin: 0 0 4px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--ink-dim); }
+  .card .port { display: block; font-size: 11.5px; color: var(--ink-dim); margin-top: 8px; letter-spacing: .04em; }
+  .card.client { border-left: 3px solid var(--client); }
+  .card.server { border-left: 3px solid var(--server); }
+  .note { border-left: 3px solid var(--client); background: var(--surface); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 22px 0; }
+  .note.warn { border-left-color: var(--danger); }
+  .note strong { color: var(--ink); }
+  .note p { margin: 0; color: var(--ink-dim); }
+  .note p + p { margin-top: 8px; }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 0 0 16px 42px; max-width: 66ch; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px; width: 26px; height: 26px;
+    border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center;
+    font: 600 12px ui-monospace, Menlo, monospace; color: var(--client); background: var(--surface);
+  }
+  ol.steps li b { color: var(--ink); }
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--ink-dim); margin: 10px 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-dim); white-space: nowrap; }
+  .tag.private { color: var(--danger); border-color: var(--danger); }
+  .tag.bcast { color: var(--server); border-color: var(--server); }
+  footer { margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--ink-dim); font-size: 13px; }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">Battle of Geniuses · гілка SurvivalMode · оновлено 31.07.2026</div>
+  <h1>Survival mode: що з чим говорить — і як це підключити</h1>
+  <p class="lede">
+    Перша половина — архітектура (хто кому дзвонить і чому). Друга — протокольний довідник для
+    клієнта: методи, події, формати відповідей, економіка. Кожен payload звірений із кодом
+    і живими прогонами на дев-сервері.
+  </p>
+</header>
+
+<section>
+  <h2><span class="num">0</span> Головна ідея за 30 секунд</h2>
+  <p class="sub">
+    Гравець ніколи не заходить у Survival напряму. Спочатку він іде до <code>main-server</code> —
+    той перевіряє гаманець, бере плату і домовляється з <code>survival-server</code> про місце в лоббі.
+    Натомість гравець отримує <b>одноразовий токен</b>, з яким уже сам підключається до
+    <code>survival-server</code>. Далі весь матч живе там.
+  </p>
+
+  <div class="cards">
+    <div class="card client">
+      <h4>Клієнт (Unity)</h4>
+      <p>Мобільна гра. Тримає <b>два</b> одночасні зʼєднання: до головного сервера і до сервера режиму.</p>
+    </div>
+    <div class="card server">
+      <h4>main-server</h4>
+      <p>Акаунти, гравці, гаманець. Єдиний, хто має право списувати й нараховувати тікети.</p>
+      <span class="port">JSTP :7000 · gRPC :5012</span>
+    </div>
+    <div class="card server">
+      <h4>survival-server</h4>
+      <p>Лоббі, раунди, підрахунок, вибування, боти. Тримає стан матчу <b>в памʼяті</b>.</p>
+      <span class="port">JSTP :4001 · gRPC :5010</span>
+    </div>
+    <div class="card server">
+      <h4>Фабрика наборів</h4>
+      <p>Адмінка збирає <b>щоденний набір із 30 раундів</b>; сервер режиму грає його слот-у-слот.</p>
+      <span class="port">gen.battleofgeniuses.com → «Фабрика Survival»</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch" style="background: var(--client)"></i> звернене до гравця (JSTP)</span>
+    <span><i class="swatch" style="background: var(--server)"></i> між серверами (gRPC / mongo)</span>
+  </div>
+
+  <h3>Ендпоінти дев-сервера</h3>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Що</th><th>Адреса</th><th>Примітка</th></tr></thead>
+    <tbody>
+      <tr><td>main-server (JSTP)</td><td><code>176.9.78.228:7000</code></td><td>протокол <code>net</code> (без TLS на деві), застосунок <code>beGenius</code>, інтерфейси <code>auth</code>, <code>beG</code></td></tr>
+      <tr><td>survival-server (JSTP)</td><td><code>176.9.78.228:4001</code></td><td>застосунок <code>survival</code>, інтерфейс <code>survival</code></td></tr>
+      <tr><td>Еталонний клієнт</td><td><a href="http://176.9.78.228:5500">176.9.78.228:5500</a></td><td>повний робочий клієнт у браузері; кожна вкладка — окремий гравець. Сайдбар «Події сервера» показує сирий протокол — незамінний для звірки</td></tr>
+      <tr><td>Адмінка наборів</td><td><a href="https://gen.battleofgeniuses.com">gen.battleofgeniuses.com</a></td><td>подивитись, які питання будуть у раунді N сьогодні</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="num">1</span> Карта звʼязків</h2>
+  <p class="sub">
+    Клієнт говорить <b>JSTP</b> (протокол Metarhia поверх голого TCP), сервери між собою — <b>gRPC</b>.
+    Це два світи, які ніде не перетинаються.
+  </p>
+
+  <div class="diagram">
+<pre class="mermaid">
+%%{init: {"theme": "base", "themeVariables": {
+  "background": "#f7f9fc",
+  "primaryColor": "#1d2536", "primaryTextColor": "#ffffff", "primaryBorderColor": "#5d6879",
+  "secondaryColor": "#eef1f6", "tertiaryColor": "#eef1f6",
+  "lineColor": "#41506b", "textColor": "#1a2230",
+  "edgeLabelBackground": "#ffffff", "fontSize": "14px"
+}}}%%
+flowchart LR
+  U["Unity клієнт"]
+  M["main-server (Impress)"]
+  S["survival-server"]
+  F["survival-editor — фабрика наборів"]
+  DB[("mongo: quizdb, survival_db")]
+  CH[("chrono-кластер: survival_sets, levels, facts")]
+
+  U -->|"JSTP :7000 — auth, beG"| M
+  U -->|"JSTP :4001 — survival"| S
+  M -->|"gRPC :5010 RegisterPlayer"| S
+  S -->|"gRPC :5012 SpendTickets, GrantTickets, ProcessSurvivalResult"| M
+  S -->|"читає набір дня — полінг, read-only"| CH
+  F -->|"пише набори"| CH
+  M --- DB
+  S --- DB
+</pre>
+  </div>
+  <p class="caption">Питання бою приходять зі <b>щоденного набору</b>, який фабрика зібрала заздалегідь; резервний пул із questions-api вмикається лише як аварійний фолбек.</p>
+</section>
+
+<section>
+  <h2><span class="num">2</span> Вхід у режим: танець із токеном</h2>
+
+  <div class="diagram">
+<pre class="mermaid">
+%%{init: {"theme": "base", "themeVariables": {
+  "background": "#f7f9fc",
+  "actorBkg": "#1d2536", "actorTextColor": "#ffffff", "actorBorder": "#5d6879",
+  "actorLineColor": "#8a96ac",
+  "signalColor": "#1a2230", "signalTextColor": "#1a2230",
+  "sequenceNumberColor": "#ffffff",
+  "noteBkgColor": "#fff3c4", "noteTextColor": "#3b3210", "noteBorderColor": "#d9c36b",
+  "lineColor": "#41506b", "textColor": "#1a2230",
+  "activationBkgColor": "#eef1f6", "activationBorderColor": "#5d6879", "fontSize": "14px"
+}}}%%
+sequenceDiagram
+  autonumber
+  participant C as Клієнт
+  participant M as main-server
+  participant S as survival-server
+
+  C->>M: auth.signIn(accountId, deviceId, ...)
+  Note over M: сокет тепер знає гравця
+  M-->>C: JWT + профіль
+
+  C->>M: beG.joinSurvival()
+  Note over M: видає безкоштовний щоденний тікет<br/>(1/добу UTC, ідемпотентно)
+  M->>S: gRPC RegisterPlayer{playerId, name, lang, ticketBalance}
+  S-->>M: {token, lobbyId, state, scheduledStartAt}
+  M->>M: списати 1 тікет + moneyFlow
+  M-->>C: {token, lobbyId, state, scheduledStartAt}
+
+  C->>S: survival.connect([token])
+  S->>S: погасити токен, звʼязати сокет ↔ playerId
+  S-->>C: {playerId, lobbyId, state, round, reconnected, roster}
+  S-)C: ticketsUpdated {balance, reason: "initial"}
+</pre>
+  </div>
+
+  <ol class="steps">
+    <li><b>Логін.</b> Після <code>signIn</code> жоден виклик не приймає <code>playerId</code> —
+      сервер бере його зі зʼєднання.</li>
+    <li><b>Заявка.</b> <code>beG.joinSurvival()</code> без параметрів. Новачку вистачає
+      безкоштовного щоденного тікета — головний сервер видає його сам перед списанням.</li>
+    <li><b>Оплата.</b> Тікет списується після успішної реєстрації. Повторний <code>joinSurvival</code>
+      того самого гравця — це реконект: свіжий токен без повторної плати.</li>
+    <li><b>Підключення.</b> Токен одноразовий (TTL 10 хв). Відповідь <code>connect</code> несе
+      <code>roster</code> — <b>єдине джерело «хто вже в лоббі»</b> для гравця, що приєднався:
+      власного <code>playerJoined</code> він не отримує, бо розсилка пішла до існування його сокета.</li>
+    <li><b>Баланс.</b> Одразу після відповіді прилітає перший <code>ticketsUpdated</code> —
+      клієнту не треба нічого запитувати.</li>
+  </ol>
+
+  <div class="note warn">
+    <p><strong>Чому не «просто передай свій playerId»?</strong></p>
+    <p>Так було до аудиту — і будь-хто з голим TCP-сокетом грав за чужого гравця. Порт
+      <code>4001</code> відкритий і не має авторизації, тому єдине джерело правди про особистість —
+      зʼєднання, привʼязане при <code>connect</code>.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">3</span> JSTP: три правила, без яких нічого не працює</h2>
+  <ol class="steps">
+    <li><b>Один аргумент — масив.</b> Кожен метод інтерфейсу <code>survival</code>:
+      <code>connect([token])</code>, <code>submitAnswer([answer])</code>, <code>buyBack([])</code>.
+      Виклик <code>connect(token)</code> без масиву — сервер візьме <b>перший символ</b> токена.</li>
+    <li><b>Результат загорнутий.</b> Успіх: <code>{ res: [значення] }</code>. Помилки застосунку —
+      <b>успішним</b> колбеком із <code>{ error: { code, description } }</code>; транспортний
+      error-колбек — лише про мережу.</li>
+    <li><b>Payload події — <code>args[0]</code>.</b> Підписуйся на події <b>до</b> того, як дочекався
+      відповіді <code>connect</code>: перший <code>ticketsUpdated</code> може приїхати тим самим
+      TCP-чанком, що й відповідь.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="num">4</span> Життя лоббі</h2>
+  <p class="sub">Одне глобальне лоббі на добу. Не кімнати, не матчмейкінг — одна спільна гра.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+%%{init: {"theme": "base", "themeVariables": {
+  "background": "#f7f9fc",
+  "primaryColor": "#1d2536", "primaryTextColor": "#ffffff", "primaryBorderColor": "#5d6879",
+  "lineColor": "#41506b", "textColor": "#1a2230",
+  "labelBackgroundColor": "#ffffff", "edgeLabelBackground": "#ffffff", "fontSize": "14px"
+}}}%%
+stateDiagram-v2
+  [*] --> BOOKING
+  BOOKING --> ONBOARDING: startAt із набору дня, у дев-режимі — перший гравець
+  ONBOARDING --> ACTIVE: всі готові чи повне лоббі, максимум по таймеру + боти до мінімуму
+  ACTIVE --> FINISHED: лишився 1 гравець або стеля раундів
+  FINISHED --> [*]
+</pre>
+  </div>
+
+  <div class="scroll-x"><table>
+    <thead><tr><th>Параметр</th><th class="num">Прод</th><th class="num">Дев (зараз)</th></tr></thead>
+    <tbody>
+      <tr><td>Старт лоббі</td><td class="num">17:00 UTC (керується набором дня; адмінка може пересунути)</td><td class="num">≈30 с після входу першого гравця</td></tr>
+      <tr><td>Реєстрація</td><td>лише до онбордингу</td><td>відкрита і під час онбордингу</td></tr>
+      <tr><td>Гравців</td><td class="num" colspan="2">8 … 64 (менше — добір ботами, боти реально грають)</td></tr>
+      <tr><td>Вхід</td><td class="num" colspan="2">1 тікет (новачка покриває безкоштовний щоденний)</td></tr>
+      <tr><td>Раундів у наборі</td><td class="num" colspan="2">30 (останній — завжди MAP)</td></tr>
+      <tr><td>Відповідь / викуп / пауза</td><td class="num" colspan="2">30 с / 15 с / 3 с</td></tr>
+      <tr><td>Реконект-грейс</td><td class="num" colspan="2">30 с (обрив мережі ≠ вибування)</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Методи лоббі: <code>ready([])</code> — «я готовий» (всі люди готові → достроковий старт),
+  <code>leaveLobby([])</code> — вийти до бою, <code>getLobbyStatus([])</code> — стан + ростер на вимогу.</p>
+</section>
+
+<section>
+  <h2><span class="num">5</span> Бій: раунди і відповіді</h2>
+  <p class="sub">
+    Режими і питання приходять зі <b>щоденного набору</b> (перемішаний цикл
+    <code>QUESTION / NUMBER / CHRONO / MAP</code> без повтору на межі циклів). Клієнту про набір
+    знати нічого не треба — все приїжджає в <code>roundStarted</code>.
+  </p>
+
+  <pre class="block"><code>// roundStarted (broadcast)
+{
+  round: 3,
+  mode: "QUESTION" | "NUMBER" | "CHRONO" | "MAP",
+  question: { ... },            // локалізоване ТВОЄЮ мовою; правильної відповіді тут НЕМА
+  deadline: 1785519999999,      // unix ms
+  durationMs: 30000,
+  activePlayers: ["id1", ...]
+}</code></pre>
+
+  <div class="scroll-x"><table>
+    <thead><tr><th>Режим</th><th>Питання містить</th><th>Відповідь — <code>submitAnswer([...])</code></th><th>Хто вибуває</th></tr></thead>
+    <tbody>
+      <tr><td>QUESTION</td><td><code>options: [текст, ...]</code></td><td><code>{type:'selection', optionId: 2}</code></td><td>усі, хто неправильно / не встиг</td></tr>
+      <tr><td>NUMBER</td><td>текст (числова оцінка)</td><td><code>{type:'number', value: 1492}</code></td><td>найгірша група за відхиленням</td></tr>
+      <tr><td>CHRONO</td><td><code>facts: [{id, text}, ...]</code> перемішані</td><td><code>{type:'chrono', order: [id3, id1, id2]}</code> — від найранішого</td><td>усі, хто помилився в порядку</td></tr>
+      <tr><td>MAP</td><td>текст («Покажи місто X»)</td><td><code>{type:'map', lat: 50.45, lng: 30.52}</code></td><td>найгірша група за відстанню</td></tr>
+    </tbody>
+  </table></div>
+
+  <pre class="block"><code>// roundResult (broadcast)
+{ round, scores: [{playerId, score, ...}], eliminated: ["id", ...],
+  correct: 2 | 1492 | [50.45, 30.52] | [id1, id2, id3] }   // формат залежить від режиму</code></pre>
+
+  <div class="note">
+    <p><strong>Дві деталі, які легко проґавити.</strong></p>
+    <p>Раунд закривається <b>достроково</b>, щойно відповіли всі живі онлайн-гравці — дедлайн у UI
+      не гарантований час.</p>
+    <p>Нічия в MAP/NUMBER розвʼязується тайбрейком (<code>tiebreakStarted</code> /
+      <code>tiebreakResult</code>): додаткове NUMBER-питання лише для учасників нічиєї, максимум
+      5 спроб, далі детермінований розрив.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">6</span> Викуп (BuyBack)</h2>
+  <p class="sub">
+    Після вибування — 15-секундне вікно. Броадкаст <code>buybackWindowOpen</code> цін <b>не несе</b>:
+    ціна персональна (залежить від твоїх спроб), тому приходить <b>приватною</b> подією.
+  </p>
+
+  <pre class="block"><code>// buyBackOffer — ПРИВАТНА подія, лише вибулому
+{
+  playerId,                  // завжди звіряй зі своїм
+  round, cost: 4,            // ціна ЦІЄЇ спроби; null = викуп недоступний
+  attempt: 2, maxUses: 5,    // «спроба 2 з 5»
+  closesAt: 1785520014999,   // справжній дедлайн вікна — рахуй відлік від нього
+  balance: 48, affordable: true,
+  unavailableReason?: "buyback_too_few_players"   // лише коли cost === null
+}</code></pre>
+
+  <p>Викуп: <code>buyBack([])</code> → <code>{ cost }</code>. Показана ціна завжди дорівнює
+  списаній. Свіжа ціна поза подією (напр., після реконекта): <code>getBuyBackQuote([])</code>.</p>
+
+  <h3>Таблиця цін: база спроби × множник смуги раундів</h3>
+  <div class="scroll-x"><table class="tabular">
+    <thead><tr><th>Викуп</th><th>Раунди 1–5 (×1)</th><th>6–10 (×2)</th><th>11–15 (×3)</th></tr></thead>
+    <tbody>
+      <tr><td>1-й</td><td>2</td><td>4</td><td>6</td></tr>
+      <tr><td>2-й</td><td>4</td><td>8</td><td>12</td></tr>
+      <tr><td>3-й</td><td>10</td><td>20</td><td>30</td></tr>
+      <tr><td>4-й</td><td>15</td><td>30</td><td>45</td></tr>
+      <tr><td>5-й</td><td>25</td><td>50</td><td>75</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">Пізніші раунди тримають останній множник. Не кешуй ціну між раундами.</p>
+
+  <h3>Причини відмови (RPC-помилка і приватна подія <code>buyBackDenied</code> — той самий тег)</h3>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Тег</th><th>Що показати гравцю</th></tr></thead>
+    <tbody>
+      <tr><td><code>insufficient_tickets</code></td><td>Не вистачає тікетів → запропонуй рекламу</td></tr>
+      <tr><td><code>buyback_window_closed</code></td><td>Вікно викупу закрилось</td></tr>
+      <tr><td><code>buyback_attempts_exhausted</code></td><td>Спроби вичерпані (5 за матч)</td></tr>
+      <tr><td><code>buyback_too_few_players</code></td><td>Залишилось замало гравців</td></tr>
+      <tr><td><code>player_not_eliminated</code></td><td>Ти не вибув</td></tr>
+      <tr><td><code>buyback_in_progress</code></td><td>Подвійний тап — викуп уже виконується</td></tr>
+      <tr><td>інший тег</td><td>показуй як є, не ковтай — це діагностика</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="num">7</span> Гаманець</h2>
+  <p>Баланс живе на main-server, а клієнту приходить сам — приватним пушем на кожен рух:</p>
+  <pre class="block"><code>// ticketsUpdated — ПРИВАТНА подія
+{ playerId, balance: 48, delta: -2,
+  reason: "initial" | "entry_fee" | "buyback" | "ad_reward" | "refresh" }</code></pre>
+  <p><code>recordAdView([])</code> — нарахування за рекламу → <code>{ ticketsGranted, balance }</code>
+  (ліміт 2 за матч). Довідково на main-server: <code>beG.getTickets()</code>.</p>
+</section>
+
+<section>
+  <h2><span class="num">8</span> Повний каталог подій</h2>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Подія</th><th>Кому</th><th>Ключове в payload</th></tr></thead>
+    <tbody>
+      <tr><td><code>playerJoined</code> / <code>playerLeft</code> / <code>playerReady</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roster</code> / <code>playerId</code></td></tr>
+      <tr><td><code>rosterUpdate</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, state, playerCount, roster</code></td></tr>
+      <tr><td><code>onboardingStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>durationMs, roster</code>; <b>поле <code>players</code> тут — ЧИСЛО</b>, склад бери з <code>roster</code></td></tr>
+      <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td>фінальний <code>roster</code> (з ботами і слотами)</td></tr>
+      <tr><td><code>roundStarted</code> / <code>answerReceived</code> / <code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td>див. §5; <code>answerReceived</code> — лише <code>playerId</code>, без відповіді</td></tr>
+      <tr><td><code>tiebreakStarted</code> / <code>tiebreakResult</code></td><td><span class="tag bcast">лоббі</span></td><td>учасники нічиєї, питання / результат</td></tr>
+      <tr><td><code>playerEliminated</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
+      <tr><td><code>buybackWindowOpen</code> / <code>buybackWindowClosed</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, windowMs, closesAt</code> — без цін</td></tr>
+      <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code> / <code>ticketsUpdated</code></td><td><span class="tag private">приватні</span></td><td>див. §6–7; завжди несуть <code>playerId</code> адресата — звіряй зі своїм</td></tr>
+      <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — ціни нема (гаманець гравця)</td></tr>
+      <tr><td><code>playerDisconnected</code> / <code>playerReconnected</code></td><td><span class="tag bcast">лоббі</span> / <span class="tag private">приватна</span></td><td>реконект несе стан для відновлення UI</td></tr>
+      <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId</code>; нагороди нараховує main-server (50 золота учасникам, 20 гемів переможцю)</td></tr>
+      <tr><td><code>lobbyCancelled</code> / <code>fightError</code></td><td><span class="tag bcast">лоббі</span></td><td>аварійні; <code>fightError.reason</code> — напр. <code>round_cap_reached</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="num">9</span> Шпаргалка викликів</h2>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Хочу…</th><th>Виклик</th><th>Куди</th></tr></thead>
+    <tbody>
+      <tr><td>Зайти в режим</td><td><code>beG.joinSurvival()</code></td><td>main-server</td></tr>
+      <tr><td>Баланс (довідково)</td><td><code>beG.getTickets()</code></td><td>main-server</td></tr>
+      <tr><td>Підтвердити себе</td><td><code>survival.connect([token])</code></td><td>survival-server</td></tr>
+      <tr><td>Я готовий</td><td><code>survival.ready([])</code></td><td>survival-server</td></tr>
+      <tr><td>Відповісти</td><td><code>survival.submitAnswer([answer])</code></td><td>survival-server</td></tr>
+      <tr><td>Ціна викупу зараз</td><td><code>survival.getBuyBackQuote([])</code></td><td>survival-server</td></tr>
+      <tr><td>Викупитись</td><td><code>survival.buyBack([])</code></td><td>survival-server</td></tr>
+      <tr><td>Тікети за рекламу</td><td><code>survival.recordAdView([])</code></td><td>survival-server</td></tr>
+      <tr><td>Стан лоббі / ростер</td><td><code>survival.getLobbyStatus([])</code></td><td>survival-server</td></tr>
+      <tr><td>Вийти до бою</td><td><code>survival.leaveLobby([])</code></td><td>survival-server</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="num">10</span> Підводні камені — кожен уже хтось ловив</h2>
+  <ol class="steps">
+    <li><b><code>onboardingStarted.players</code> — число, а не масив.</b> Склад завжди бери з
+      <code>roster</code>; полю, якому не довіряєш за типом, став guard.</li>
+    <li><b>Ростер новачка — лише у відповіді <code>connect</code>.</b> Викинеш — лоббі буде
+      «порожнім» до першої зміни складу.</li>
+    <li><b>Підписка на події — до відповіді <code>connect</code></b>, інакше загубиш перший
+      <code>ticketsUpdated</code>.</li>
+    <li><b>Аргумент завжди один — масив.</b> <code>connect(token)</code> = «Invalid token»
+      через перший символ рядка.</li>
+    <li><b><code>closesAt</code> з оффера — справжній дедлайн</b>; рахуй відлік від нього,
+      а не від моменту отримання події.</li>
+    <li><b>Після реконекта</b> (<code>reconnected: true</code>) стан відновлюй з відповіді
+      <code>connect</code>, а ціну викупу перепитуй через <code>getBuyBackQuote</code>.</li>
+    <li><b>Помилки — в успішному колбеку</b> (<code>{error:{code,description}}</code>);
+      транспортний error — лише мережа.</li>
+    <li><b>Обрив мережі ≠ вибування.</b> 30 с грейсу; вибути можна лише за результатом раунду.</li>
+  </ol>
+</section>
+
+<footer>
+  Джерело істини — код гілки <code>SurvivalMode</code> і еталонний клієнт
+  <a href="http://176.9.78.228:5500">176.9.78.228:5500</a>: його <code>web/src/survival.ts</code> —
+  готовий редюсер усіх подій, який переноситься в C# майже один в один.
+  Історична примітка: цикл режимів <code>[Q,Q,CHRONO 25%,MAP]</code>, «раунд 15 завжди MAP» і плоскі
+  ціни викупу з ранніх версій цієї доки — застаріли; чинне описано вище.
+</footer>
+
+</div>
+</head></html>
