@@ -1,5 +1,35 @@
 <!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // applied before first paint so the page never flashes the wrong theme
+  (function () {
+    var v = null;
+    try { v = localStorage.getItem('surv-doc-theme'); } catch (e) {}
+    if (v === 'light' || v === 'dark') document.documentElement.dataset.theme = v;
+  })();
+</script>
 <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true });</script>
+<style>
+  .theme-sw {
+    position: fixed; top: 14px; right: 14px; z-index: 50;
+    display: flex; gap: 2px; padding: 3px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .theme-sw button {
+    font: 600 12px ui-monospace, Menlo, Consolas, monospace;
+    color: var(--ink-dim); background: none; border: 0; border-radius: 7px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  .theme-sw button:hover { color: var(--ink); }
+  .theme-sw button.on { background: var(--surface-2); color: var(--client); }
+  .theme-sw button:focus-visible { outline: 2px solid var(--client); outline-offset: 1px; }
+  @media (max-width: 640px) { .theme-sw { top: 8px; right: 8px; } }
+</style>
+</head><body>
+<div class="theme-sw" role="group" aria-label="Тема сторінки">
+  <button type="button" data-v="light" onclick="__setTheme('light')">Світла</button>
+  <button type="button" data-v="dark" onclick="__setTheme('dark')">Темна</button>
+  <button type="button" data-v="system" onclick="__setTheme('system')">Системна</button>
+</div>
 <title>Survival mode — як воно влаштоване</title>
 
 <style>
@@ -478,4 +508,28 @@ stateDiagram-v2
 </footer>
 
 </div>
-</head></html>
+<script>
+  (function () {
+    var KEY = 'surv-doc-theme';
+    function mark(v) {
+      document.querySelectorAll('.theme-sw button').forEach(function (b) {
+        b.classList.toggle('on', b.dataset.v === v);
+      });
+    }
+    window.__setTheme = function (v) {
+      var r = document.documentElement;
+      if (v === 'light' || v === 'dark') {
+        r.dataset.theme = v;
+        try { localStorage.setItem(KEY, v); } catch (e) {}
+      } else {
+        delete r.dataset.theme;
+        try { localStorage.removeItem(KEY); } catch (e) {}
+      }
+      mark(v);
+    };
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    mark(saved === 'light' || saved === 'dark' ? saved : 'system');
+  })();
+</script>
+</body></html>
