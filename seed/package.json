@@ -1,0 +1,15 @@
+{
+  "name": "survival-testbed-seed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Seeds the local testbed mongo with questions/categories so a Survival match and a normal fight can run.",
+  "main": "index.js",
+  "scripts": {
+    "seed": "node index.js",
+    "seed:reset": "node index.js --reset",
+    "verify": "node index.js --verify"
+  },
+  "dependencies": {
+    "mongodb": "^4.17.2"
+  }
+}

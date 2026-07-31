@@ -1,0 +1,267 @@
+###############################################################################
+# survival-testbed — fully local, isolated Battle of Geniuses stack.
+#
+# Services are built from ../battleofgeniuses/<service> but NOTHING here talks
+# to a remote host: every DB_URL / MONGO_URI points at the `mongo` service on
+# this compose network, and every *_HOST is a compose service name.
+#
+#   docker compose --env-file .env.testbed up -d --build     (or ./up.sh)
+#
+# Old node base images (main-server node:10, fight/survival node:12.14) have no
+# usable arm64 story for the native `grpc` addon — they are pinned to
+# linux/amd64 and run through Rosetta. questions-api (node:22) builds native.
+###############################################################################
+
+name: survival-testbed
+
+services:
+  # ─── Mongo ─────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:4.4
+    container_name: testbed-mongo
+    command: ["--bind_ip_all"]
+    environment:
+      - MONGO_INITDB_DATABASE=quizdb
+    ports:
+      - '${MONGO_HOST_PORT:-27077}:27017'
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - testbed
+    healthcheck:
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # ─── questions-api (editor HTTP + game gRPC) ───────────────────────────────
+  questions-api:
+    build:
+      context: ../battleofgeniuses/questions-api
+      args:
+        - BUILD_MODE=dev
+    container_name: testbed-questions-api
+    environment:
+      - WEB_PORT=${QUESTIONS_API_WEB_PORT}
+      - GAME_PORT=${QUESTIONS_API_GAME_PORT}
+      - DB_URL=${DB_URL}
+      - QUESTIONS_DB_NAME=${QUESTIONS_DB_NAME}
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+      - GMAIL_REFRESH_TOKEN=${GMAIL_REFRESH_TOKEN}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - TINIFY_API_KEY=${TINIFY_API_KEY}
+      - SERP_API_KEY=${SERP_API_KEY}
+      - QUESTION_API_URL=${QUESTION_API_URL}
+      - EDITOR_SESSION_TIMEOUT=${EDITOR_SESSION_TIMEOUT}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '${QUESTIONS_API_WEB_HOST_PORT:-3001}:${QUESTIONS_API_WEB_PORT}'
+      - '${QUESTIONS_API_GAME_HOST_PORT:-5556}:${QUESTIONS_API_GAME_PORT}'
+    networks:
+      - testbed
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"require('http').get({host:'127.0.0.1',port:${QUESTIONS_API_WEB_PORT},path:'/internal/survival_questions'},r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # ─── main-server (impress / JSTP) ──────────────────────────────────────────
+  main-server:
+    build:
+      context: ../battleofgeniuses/main-server
+      dockerfile: dev.Dockerfile
+      args:
+        - BUILD_MODE=dev
+    container_name: testbed-main-server
+    platform: linux/amd64
+    environment:
+      - DB_URL=${DB_URL}
+      - DB_NAME=${MAIN_SERVER_DB_NAME}
+      - CLIENTS_PORT=${MAIN_SERVER_CLIENTS_PORT}
+      - RPC_USE_TLS=${MAIN_SERVER_RPC_USE_TLS}
+      - GRPC_PORT_FOR_FIGHT=${MAIN_SERVER_GRPC_PORT_FOR_FIGHT}
+      - GRPC_PORT_FOR_TOURNAMENT=${MAIN_SERVER_GRPC_PORT_FOR_TOURNAMENT}
+      - GRPC_PORT_FOR_ACADEMY=${MAIN_SERVER_GRPC_PORT_FOR_ACADEMY}
+      - GRPC_PORT_FOR_SURVIVAL=${MAIN_SERVER_GRPC_PORT_FOR_SURVIVAL}
+      - FIGHT_SERVER_HOST=${FIGHT_SERVER_HOST}
+      - FIGHT_SERVER_GRPC_PORT=${FIGHT_SERVER_GRPC_PORT}
+      - FIGHT_SERVER_CLIENTS_HOSTS=${FIGHT_SERVER_CLIENTS_HOSTS}
+      - FIGHT_SERVER_CLIENTS_PORT=${FIGHT_SERVER_CLIENTS_EXTERNAL_PORT}
+      - QUESTION_SERVER_HOST=${QUESTION_SERVER_HOST}
+      - QUESTION_SERVER_GRPC_PORT=${QUESTION_SERVER_GRPC_PORT}
+      - TOURNAMENT_SERVER_HOST=daily-tournaments-server
+      - TOURNAMENT_SERVER_GRPC_PORT=${MAIN_SERVER_GRPC_PORT_FOR_TOURNAMENT}
+      - SURVIVAL_SERVER_HOST=${SURVIVAL_SERVER_HOST}
+      - SURVIVAL_SERVER_GRPC_PORT=${SURVIVAL_SERVER_GRPC_PORT}
+      - SURVIVAL_SERVER_CLIENTS_HOSTS=${SURVIVAL_SERVER_CLIENTS_HOSTS}
+      - SURVIVAL_SERVER_CLIENTS_PORT=${SURVIVAL_SERVER_CLIENTS_EXTERNAL_PORT}
+      - ACADEMY_API_CLIENT_URL=${ACADEMY_API_CLIENT_URL}
+      - AUTH_JWT_PUBLIC_KEY_PATH=${AUTH_JWT_PUBLIC_KEY_PATH}
+      - AUTH_JWT_PRIVATE_KEY_PATH=${AUTH_JWT_PRIVATE_KEY_PATH}
+      - AUTH_JWT_ALGORITHM=${AUTH_JWT_ALGORITHM}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - NODE_ENV=${MAIN_SERVER_NODE_ENV}
+      - ENABLE_BOTS=${ENABLE_BOTS}
+      - SOLO_BOT_TIMEOUT_MS=${SOLO_BOT_TIMEOUT_MS}
+      - BOTS_SERVER_ADDRESS=${BOTS_SERVER_ADDRESS}
+      - MM_TEAM_SEARCH_TO_SOLO_MS=${MM_TEAM_SEARCH_TO_SOLO_MS:-}
+      - MM_SOLO_BOT_DELAY_MS=${MM_SOLO_BOT_DELAY_MS:-}
+      - MM_TEAM_ITERATION_MS=${MM_TEAM_ITERATION_MS:-}
+      - MM_TEAM_BOT_DELAY_MS=${MM_TEAM_BOT_DELAY_MS:-}
+      - MM_PARTY_BOT_DELAY_MS=${MM_PARTY_BOT_DELAY_MS:-}
+      # explicitly blank out anything that could carry a remote host
+      - TLS_CERT_PATH=
+      - TLS_KEY_PATH=
+    volumes:
+      # JWT signing keys (AUTH_JWT_*_PATH are relative to /home/server)
+      - ../battleofgeniuses/main-server/keys:/home/server/keys:ro
+      # main-server loads its protos from process.cwd(). They are gitignored in
+      # the source repo and only exist there because someone ran the copy
+      # scripts; mounting them from ./proto guarantees they are present and
+      # current without writing anything into ../battleofgeniuses.
+      - ../battleofgeniuses/proto/question_server.proto:/home/server/question_server.proto:ro
+      - ../battleofgeniuses/proto/fight_server.proto:/home/server/fight_server.proto:ro
+      - ../battleofgeniuses/proto/survival_server.proto:/home/server/survival_server.proto:ro
+      - ../battleofgeniuses/proto/tournament_server.proto:/home/server/tournament_server.proto:ro
+      - ../battleofgeniuses/proto/academy_server.proto:/home/server/academy_server.proto:ro
+      # neutralise the checked-in .env that points at a remote mongo
+      - ./overrides/main-server.env:/home/server/.env:ro
+    ports:
+      # 127.0.0.1:7000 works even though the macOS AirPlay Receiver holds *:7000
+      - '127.0.0.1:7000:${MAIN_SERVER_CLIENTS_PORT}'
+      - '${MAIN_SERVER_HOST_PORT:-7010}:${MAIN_SERVER_CLIENTS_PORT}'
+      # main-server gRPC (GrantTickets/SpendTickets) — testbed helper uses it to top up mock players
+      - '5012:${MAIN_SERVER_GRPC_PORT_FOR_SURVIVAL}'
+    depends_on:
+      mongo:
+        condition: service_healthy
+      questions-api:
+        condition: service_started
+    networks:
+      - testbed
+    restart: unless-stopped
+
+  # ─── fight-server (classic PvP, kept so main-server's wiring is complete) ──
+  fight-server:
+    build:
+      context: ../battleofgeniuses/fight-server
+      dockerfile: dev.Dockerfile
+      args:
+        - BUILD_MODE=dev
+    container_name: testbed-fight-server
+    platform: linux/amd64
+    entrypoint: yarn
+    command: build-and-serve
+    environment:
+      - DB_URL=${DB_URL}
+      - DB_NAME=${FIGHT_SERVER_DB_NAME}
+      - QUESTION_SERVER_HOST=${QUESTION_SERVER_HOST}
+      - QUESTION_SERVER_GRPC_PORT=${QUESTION_SERVER_GRPC_PORT}
+      - MAIN_SERVER_HOST=${FIGHT_SERVER_MAIN_SERVER_HOST}
+      - MAIN_SERVER_GRPC_PORT=${FIGHT_SERVER_MAIN_SERVER_GRPC_PORT}
+      - GRPC_PORT=${FIGHT_SERVER_GRPC_PORT}
+      - CLIENTS_PORT=${FIGHT_SERVER_CLIENTS_LOCAL_PORT}
+      - WIN_RATE_SERVER_HOST=${WIN_RATE_SERVER_HOST}
+      - WIN_RATE_SERVER_GRPC_PORT=${WIN_RATE_SERVER_GRPC_PORT}
+      - BOTS_HANDLER_SERVER_HOST=${BOTS_HANDLER_SERVER_HOST}
+      - BOTS_HANDLER_SERVER_GRPC_PORT=${BOTS_HANDLER_SERVER_GRPC_PORT}
+      - CHRONO_DB_URL=${CHRONO_DB_URL:-}
+      - CHRONO_DB_NAME=${CHRONO_DB_NAME:-chrono_db}
+      - FACTS_FORCE=${FACTS_FORCE:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      questions-api:
+        condition: service_started
+    ports:
+      - '${FIGHT_SERVER_HOST_PORT:-7777}:${FIGHT_SERVER_CLIENTS_LOCAL_PORT}'
+    volumes:
+      - fight-logs:/home/server/logs
+    networks:
+      - testbed
+    restart: unless-stopped
+
+  # ─── survival-server (the thing under test) ───────────────────────────────
+  survival-server:
+    build:
+      context: ../battleofgeniuses/survival-server
+      dockerfile: ../../survival-testbed/docker/survival-server.Dockerfile
+    container_name: testbed-survival-server
+    platform: linux/amd64
+    environment:
+      - CLIENTS_PORT=${SURVIVAL_SERVER_CLIENTS_LOCAL_PORT}
+      - GRPC_PORT=${SURVIVAL_SERVER_GRPC_PORT}
+      - DB_URL=${DB_URL}
+      - SURVIVAL_DB_NAME=${SURVIVAL_DB_NAME}
+      - QUESTION_SERVER_HOST=${QUESTION_SERVER_HOST}
+      - QUESTION_SERVER_GRPC_PORT=${QUESTION_SERVER_GRPC_PORT}
+      - QUESTION_EDITOR_HOST=${QUESTION_SERVER_HOST}
+      - QUESTION_EDITOR_WEB_PORT=${QUESTION_SERVER_WEB_PORT}
+      - MAIN_SERVER_HOST=main-server
+      - MAIN_SERVER_GRPC_PORT=${MAIN_SERVER_GRPC_PORT_FOR_SURVIVAL}
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN}
+      - SURVIVAL_START_HOUR_UTC=${SURVIVAL_START_HOUR_UTC:-}
+      - SURVIVAL_ONBOARDING_MS=${SURVIVAL_ONBOARDING_MS:-}
+      - SURVIVAL_INSTANT_ONBOARDING_MS=${SURVIVAL_INSTANT_ONBOARDING_MS:-}
+      - SURVIVAL_ROUND_MS=${SURVIVAL_ROUND_MS:-}
+      - SURVIVAL_BUYBACK_MS=${SURVIVAL_BUYBACK_MS:-}
+      - SURVIVAL_ROUND_START_DELAY_MS=${SURVIVAL_ROUND_START_DELAY_MS:-}
+      - SURVIVAL_MIN_PLAYERS=${SURVIVAL_MIN_PLAYERS:-}
+      - SURVIVAL_DISCONNECT_GRACE_MS=${SURVIVAL_DISCONNECT_GRACE_MS:-}
+      - SURVIVAL_INSTANT_START=${SURVIVAL_INSTANT_START:-}
+      - SURVIVAL_MAX_ROUNDS=${SURVIVAL_MAX_ROUNDS:-}
+      - SURVIVAL_BOT_ACCURACY=${SURVIVAL_BOT_ACCURACY:-}
+      - SURVIVAL_BUYBACK_MIN_PLAYERS_REQUIRED=${SURVIVAL_BUYBACK_MIN_PLAYERS_REQUIRED:-}
+      - SURVIVAL_BUYBACK_MAX_USES=${SURVIVAL_BUYBACK_MAX_USES:-}
+      - SURVIVAL_BUYBACK_FIXED_COSTS=${SURVIVAL_BUYBACK_FIXED_COSTS:-}
+      - SURVIVAL_BUYBACK_ROUND_BAND_SIZE=${SURVIVAL_BUYBACK_ROUND_BAND_SIZE:-}
+      - SURVIVAL_BUYBACK_ROUND_MULTIPLIERS=${SURVIVAL_BUYBACK_ROUND_MULTIPLIERS:-}
+      - CHRONO_DB_URL=${CHRONO_DB_URL:-}
+      - CHRONO_DB_NAME=${CHRONO_DB_NAME:-chrono_db}
+      - SURVIVAL_CHRONO_EVENTS_PER_ROUND=${SURVIVAL_CHRONO_EVENTS_PER_ROUND:-}
+      # daily predefined sets (db survival_factory). Empty defaults keep legacy
+      # behavior; with an empty URL survival-server falls back to the
+      # CHRONO_DB_URL cluster, which in this testbed is the local `mongo`
+      # service — so `node seed/make-survival-set.js` is picked up with no env
+      # changes. Inside the compose network the URL is mongodb://mongo:27017
+      # (127.0.0.1:27077 is only the host-published port for seeds/e2e).
+      - SURVIVAL_SETS_DB_URL=${SURVIVAL_SETS_DB_URL:-}
+      - SURVIVAL_SETS_DB_NAME=${SURVIVAL_SETS_DB_NAME:-}
+      # 2s poll (game default is 60s): the e2e flow seeds a set and joins right
+      # away under INSTANT_START, so a 60s poll at arbitrary phase would miss
+      # the set in a sizable share of runs and flakily fail --expect-set.
+      - SURVIVAL_SETS_POLL_MS=${SURVIVAL_SETS_POLL_MS:-2000}
+    volumes:
+      # keep the runtime protos in sync with ../battleofgeniuses/proto without
+      # writing into that repo (survival resolves ../src/proto from dist/)
+      - ../battleofgeniuses/proto/question_server.proto:/home/server/src/proto/question_server.proto:ro
+      - ../battleofgeniuses/proto/survival_server.proto:/home/server/src/proto/survival_server.proto:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+      questions-api:
+        condition: service_started
+    ports:
+      - '${SURVIVAL_SERVER_HOST_PORT:-4001}:${SURVIVAL_SERVER_CLIENTS_LOCAL_PORT}'
+      - '${SURVIVAL_SERVER_GRPC_HOST_PORT:-5010}:${SURVIVAL_SERVER_GRPC_PORT}'
+    networks:
+      - testbed
+    restart: unless-stopped
+
+networks:
+  testbed:
+    name: survival-testbed
+
+volumes:
+  mongo-data:
+  fight-logs:

@@ -1,0 +1,17 @@
+{
+  "name": "survival-testbed-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
+    "metarhia-jstp": "git+https://github.com/ykolomiets/jstp.git#dee24b1a3e91b533b02a8d4b1cf654064662595a",
+    "mongodb": "^3.7.4",
+    "ws": "^8.18.0"
+  }
+}

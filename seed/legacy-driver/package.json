@@ -1,0 +1,1 @@
+{ "name": "legacy-mongo-driver", "private": true, "dependencies": { "mongodb": "3.7.4" } }
