@@ -129,7 +129,7 @@
 <div class="wrap">
 
 <header class="top">
-  <div class="eyebrow">Battle of Geniuses · гілка SurvivalMode · оновлено 31.07.2026</div>
+  <div class="eyebrow">Battle of Geniuses · гілка SurvivalMode · оновлено 04.08.2026</div>
   <h1>Survival mode: що з чим говорить — і як це підключити</h1>
   <p class="lede">
     Перша половина — архітектура (хто кому дзвонить і чому). Друга — протокольний довідник для
@@ -145,6 +145,9 @@
     той перевіряє гаманець, бере плату і домовляється з <code>survival-server</code> про місце в лоббі.
     Натомість гравець отримує <b>одноразовий токен</b>, з яким уже сам підключається до
     <code>survival-server</code>. Далі весь матч живе там.
+    А ще до всього цього, у головному меню, екран бронювання показує, хто вже записався —
+    і теж <b>лише через <code>main-server</code></b> (§2): зʼєднання з сервером режиму там
+    ще немає.
   </p>
 
   <div class="cards">
@@ -224,7 +227,125 @@ flowchart LR
 </section>
 
 <section>
-  <h2><span class="num">2</span> Вхід у режим: танець із токеном</h2>
+  <h2><span class="num">2</span> Екран бронювання: хто вже записався</h2>
+  <p class="sub">
+    Попап реєстрації живе в головному меню — його відкривають за <b>години</b> до матчу, коли
+    зʼєднання з <code>survival-server</code> ще немає й бути не може. Усе, що йому треба —
+    скільки народу записалось, коли старт, чи я вже в списку і <b>хто ці люди</b> — дає один
+    виклик до головного сервера: <code>beG.getSurvivalStatus()</code>.
+  </p>
+
+  <div class="diagram">
+<pre class="mermaid">
+%%{init: {"theme": "base", "themeVariables": {
+  "background": "#f7f9fc",
+  "actorBkg": "#1d2536", "actorTextColor": "#ffffff", "actorBorder": "#5d6879",
+  "actorLineColor": "#8a96ac",
+  "signalColor": "#1a2230", "signalTextColor": "#1a2230",
+  "sequenceNumberColor": "#ffffff",
+  "noteBkgColor": "#fff3c4", "noteTextColor": "#3b3210", "noteBorderColor": "#d9c36b",
+  "lineColor": "#41506b", "textColor": "#1a2230",
+  "activationBkgColor": "#eef1f6", "activationBorderColor": "#5d6879", "fontSize": "14px"
+}}}%%
+sequenceDiagram
+  autonumber
+  participant C as Клієнт
+  participant M as main-server
+  participant S as survival-server
+
+  C->>M: beG.getSurvivalStatus()
+  M->>S: gRPC GetActiveLobby{}
+  S-->>M: {lobbyId, state, playerCount, activePlayerCount,<br/>scheduledStartAt, round, roster}
+  M-->>C: {available, registered, lobby, tickets, entryCost, hosts, port, …}
+  Note over C,S: клієнт не торкається survival-server —<br/>ні токена, ні плати, ні подій;<br/>екран оновлюється повторним викликом
+</pre>
+  </div>
+  <p class="caption">Той самий ростер, що бачать усередині лоббі, — але без токена, без списаного тікета і без JSTP-сесії.</p>
+
+  <h3>Відповідь <code>beG.getSurvivalStatus()</code></h3>
+  <pre class="block"><code>{
+  available: true,        // survival-server відповів; false — режим сьогодні недоступний
+  registered: false,      // чи оплачений вхід САМЕ в це лоббі (див. нижче)
+  lobby: {                // null, коли активного лоббі зараз нема — теж «недоступно»
+    lobbyId: "…",
+    state: "BOOKING",     // BOOKING | ONBOARDING | ACTIVE | FINISHED | CANCELLED
+    playerCount: 48,      // усього записаних (боти з кінця онбордингу теж тут)
+    activePlayerCount: 48,// ще не вибулі
+    scheduledStartAt: "2026-08-04T17:00:00.000Z",   // ISO-8601, UTC
+    round: 0,
+    roster: [ … ]         // ПОВНИЙ склад, у порядку реєстрації
+  },
+  tickets: 12, entryCost: 1,                        // «Грати за 1 🎟»
+  freeDailyTickets: 1, freeDailyGranted: 1,         // 0 = сьогоднішній уже забраний
+  nextFreeDailyAt: "2026-08-05T00:00:00.000Z",
+  hosts: ["176.9.78.228"], port: 4001               // куди підключатись ПІСЛЯ joinSurvival
+}</code></pre>
+
+  <h3>Рядок ростера — публічний профіль, нічого гаманцевого</h3>
+  <pre class="block"><code>{
+  playerId: "…",
+  name: "Ігор",
+  character: 3,           // номер персонажа → аватар
+  flag: "UA",             // ISO-код; "UN" коли geoip не впізнав IP, "" лише у ботів
+  clan: "Genius Squad",   // НАЗВА клану, "" коли гравець без клану; у ботів завжди ""
+  isBot: false,
+  slot: null,             // null аж до початку бою
+  eliminated: false,
+  eliminatedAtRound: null,
+  ready: false
+}</code></pre>
+
+  <div class="scroll-x"><table>
+    <thead><tr><th>Поле</th><th>Тип</th><th>Що з ним робити на екрані</th></tr></thead>
+    <tbody>
+      <tr><td><i>індекс у масиві</i></td><td>—</td><td><b>номер рядка = індекс + 1</b>; <code>slot</code> для цього не годиться</td></tr>
+      <tr><td><code>playerId</code></td><td>string</td><td>ключ рядка; збіг зі своїм — підсвітити «це я»</td></tr>
+      <tr><td><code>name</code></td><td>string</td><td>нікнейм</td></tr>
+      <tr><td><code>flag</code></td><td>string</td><td>ISO-код країни (<code>"UA"</code>). У живого гравця порожнім не буває: коли geoip не впізнав IP, main-server ставить <code>"UN"</code>. <code>""</code> — лише у ботів</td></tr>
+      <tr><td><code>character</code></td><td>number</td><td>аватар; у ботів <code>0</code></td></tr>
+      <tr><td><code>clan</code></td><td>string</td><td><b>назва</b> клану, не id — резолвить main-server при реєстрації. <code>""</code> = без клану, плашку ховай</td></tr>
+      <tr><td><code>isBot</code></td><td>boolean</td><td>у <code>BOOKING</code> ботів ще немає — їх дописують у кінці онбордингу</td></tr>
+      <tr><td><code>ready</code></td><td>boolean</td><td>«готовий»; має сенс до бою, зі стартом сервер ставить <code>true</code> усім</td></tr>
+      <tr><td><code>slot</code></td><td>number | null</td><td>місце в бою; заповнюється разом із <code>fightStarted</code></td></tr>
+      <tr><td><code>eliminated</code> / <code>eliminatedAtRound</code></td><td>boolean / number | null</td><td>для того самого списку вже під час бою</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note warn">
+    <p><strong>Чому не <code>roster</code> із <code>survival.connect</code>?</strong></p>
+    <p>Бо його там ще нема кому віддати. Токен одноразовий і живе <b>10 хвилин</b>
+      (<code>SURVIVAL_TOKEN_TTL_MS</code>, дефолт 600000 мс), а екран бронювання відкривають за
+      години до старту — токен, узятий заради списку учасників, протухне задовго до входу.
+      До того ж видає його <code>beG.joinSurvival()</code>, який <b>списує вхідний тікет</b>:
+      подивитись, хто записався, не має коштувати ані тікета.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Порядок ростера — частина контракту.</strong></p>
+    <p>Масив приходить у порядку реєстрації і в такому вигляді має дійти до екрана:
+      <b>не сортувати, не фільтрувати, не склеювати дублікати</b>. Нумерація рядків береться
+      з індексу, бо <code>slot</code> лишається <code>null</code> усе бронювання й весь онбординг —
+      слоти сервер роздає одним проходом у самому кінці, безпосередньо перед
+      <code>fightStarted</code>. Відсортував список — і номери в UI перестали означати хоч що-небудь.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Дві дрібниці, що економлять годину.</strong></p>
+    <p><code>registered</code> головний сервер тримає <b>в памʼяті процесу</b> (запис живе 6 год):
+      після його рестарту прапорець стане <code>false</code>, хоча місце в лоббі нікуди не поділось.
+      Надійніша перевірка «я в списку» — знайти свій <code>playerId</code> у <code>roster</code>.</p>
+    <p>Виклик заразом видає безкоштовний щоденний тікет (той самий, що й <code>beG.getTickets</code>:
+      1/добу UTC, ідемпотентно), тож <code>tickets</code> у відповіді вже свіжий — окремо питати
+      баланс для цього екрана не треба.</p>
+  </div>
+
+  <p>Клан у ростері — це знімок на момент реєстрації: main-server бере <code>clan</code>-id гравця,
+  перетворює його на назву й віддає її survival-server. Перейменування клану після запису в
+  чинному ростері не зʼявиться, а зниклий клан просто дає <code>""</code> — місця гравець не втрачає.</p>
+</section>
+
+<section>
+  <h2><span class="num">3</span> Вхід у режим: танець із токеном</h2>
 
   <div class="diagram">
 <pre class="mermaid">
@@ -264,14 +385,17 @@ sequenceDiagram
 
   <ol class="steps">
     <li><b>Логін.</b> Після <code>signIn</code> жоден виклик не приймає <code>playerId</code> —
-      сервер бере його зі зʼєднання.</li>
+      сервер бере його зі зʼєднання. А до <code>signIn</code> методи <code>beG</code> (у тому числі
+      <code>getSurvivalStatus</code> з §2) просто мовчать: колбека не буде взагалі, це тиша,
+      а не помилка.</li>
     <li><b>Заявка.</b> <code>beG.joinSurvival()</code> без параметрів. Новачку вистачає
       безкоштовного щоденного тікета — головний сервер видає його сам перед списанням.</li>
     <li><b>Оплата.</b> Тікет списується після успішної реєстрації. Повторний <code>joinSurvival</code>
       того самого гравця — це реконект: свіжий токен без повторної плати.</li>
     <li><b>Підключення.</b> Токен одноразовий (TTL 10 хв). Відповідь <code>connect</code> несе
-      <code>roster</code> — <b>єдине джерело «хто вже в лоббі»</b> для гравця, що приєднався:
-      власного <code>playerJoined</code> він не отримує, бо розсилка пішла до існування його сокета.</li>
+      <code>roster</code> (рядок — того самого формату, що в §2) — <b>єдине джерело «хто вже
+      в лоббі»</b> для гравця, що приєднався: власного <code>playerJoined</code> він не отримує,
+      бо розсилка пішла до існування його сокета.</li>
     <li><b>Баланс.</b> Одразу після відповіді прилітає перший <code>ticketsUpdated</code> —
       клієнту не треба нічого запитувати.</li>
   </ol>
@@ -285,7 +409,7 @@ sequenceDiagram
 </section>
 
 <section>
-  <h2><span class="num">3</span> JSTP: три правила, без яких нічого не працює</h2>
+  <h2><span class="num">4</span> JSTP: три правила, без яких нічого не працює</h2>
   <ol class="steps">
     <li><b>Один аргумент — масив.</b> Кожен метод інтерфейсу <code>survival</code>:
       <code>connect([token])</code>, <code>submitAnswer([answer])</code>, <code>buyBack([])</code>.
@@ -300,7 +424,7 @@ sequenceDiagram
 </section>
 
 <section>
-  <h2><span class="num">4</span> Життя лоббі</h2>
+  <h2><span class="num">5</span> Життя лоббі</h2>
   <p class="sub">Одне глобальне лоббі на добу. Не кімнати, не матчмейкінг — одна спільна гра.</p>
 
   <div class="diagram">
@@ -334,11 +458,13 @@ stateDiagram-v2
   </table></div>
 
   <p>Методи лоббі: <code>ready([])</code> — «я готовий» (всі люди готові → достроковий старт),
-  <code>leaveLobby([])</code> — вийти до бою, <code>getLobbyStatus([])</code> — стан + ростер на вимогу.</p>
+  <code>leaveLobby([])</code> — вийти до бою, <code>getLobbyStatus([])</code> — стан + ростер на вимогу.
+  Усі троє працюють лише для вже привʼязаного сокета; <b>до</b> входу склад лоббі показує
+  <code>beG.getSurvivalStatus</code> (§2).</p>
 </section>
 
 <section>
-  <h2><span class="num">5</span> Бій: раунди і відповіді</h2>
+  <h2><span class="num">6</span> Бій: раунди і відповіді</h2>
   <p class="sub">
     Режими і питання приходять зі <b>щоденного набору</b> (перемішаний цикл
     <code>QUESTION / NUMBER / CHRONO / MAP</code> без повтору на межі циклів). Клієнту про набір
@@ -380,7 +506,7 @@ stateDiagram-v2
 </section>
 
 <section>
-  <h2><span class="num">6</span> Викуп (BuyBack)</h2>
+  <h2><span class="num">7</span> Викуп (BuyBack)</h2>
   <p class="sub">
     Після вибування — 15-секундне вікно. Броадкаст <code>buybackWindowOpen</code> цін <b>не несе</b>:
     ціна персональна (залежить від твоїх спроб), тому приходить <b>приватною</b> подією.
@@ -428,7 +554,7 @@ stateDiagram-v2
 </section>
 
 <section>
-  <h2><span class="num">7</span> Гаманець</h2>
+  <h2><span class="num">8</span> Гаманець</h2>
   <p>Баланс живе на main-server, а клієнту приходить сам — приватним пушем на кожен рух:</p>
   <pre class="block"><code>// ticketsUpdated — ПРИВАТНА подія
 { playerId, balance: 48, delta: -2,
@@ -438,32 +564,38 @@ stateDiagram-v2
 </section>
 
 <section>
-  <h2><span class="num">8</span> Повний каталог подій</h2>
+  <h2><span class="num">9</span> Повний каталог подій</h2>
   <div class="scroll-x"><table>
     <thead><tr><th>Подія</th><th>Кому</th><th>Ключове в payload</th></tr></thead>
     <tbody>
-      <tr><td><code>playerJoined</code> / <code>playerLeft</code> / <code>playerReady</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roster</code> / <code>playerId</code></td></tr>
-      <tr><td><code>rosterUpdate</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, state, playerCount, roster</code></td></tr>
-      <tr><td><code>onboardingStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>durationMs, roster</code>; <b>поле <code>players</code> тут — ЧИСЛО</b>, склад бери з <code>roster</code></td></tr>
-      <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td>фінальний <code>roster</code> (з ботами і слотами)</td></tr>
-      <tr><td><code>roundStarted</code> / <code>answerReceived</code> / <code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td>див. §5; <code>answerReceived</code> — лише <code>playerId</code>, без відповіді</td></tr>
+      <tr><td><code>playerJoined</code> / <code>playerLeft</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, totalPlayers</code> (у <code>playerJoined</code> ще й <code>name</code>); слідом сервер сам шле <code>rosterUpdate</code></td></tr>
+      <tr><td><code>playerReady</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, name, readyCount, humanCount</code> — <b>без</b> <code>totalPlayers</code>; слідом іде <code>rosterUpdate</code></td></tr>
+      <tr><td><code>rosterUpdate</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, state, playerCount, activePlayerCount, roster</code> — склад завжди повний, не діф</td></tr>
+      <tr><td><code>onboardingStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>durationMs, players, readyCount</code>. <b>Ростера тут немає</b>, а <code>players</code> — ЧИСЛО; і <code>rosterUpdate</code> слідом за цією подією <b>не</b> йде, тож склад тримай той, що вже маєш</td></tr>
+      <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, players: [{playerId, slot, isBot}]</code> — це урізаний список, не рядки ростера. Повний склад із ботами і слотами прилітає окремим <code>rosterUpdate</code>, який ця подія тригерить</td></tr>
+      <tr><td><code>roundStarted</code> / <code>answerReceived</code> / <code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td>див. §6; <code>answerReceived</code> — лише <code>playerId</code>, без відповіді</td></tr>
       <tr><td><code>tiebreakStarted</code> / <code>tiebreakResult</code></td><td><span class="tag bcast">лоббі</span></td><td>учасники нічиєї, питання / результат</td></tr>
       <tr><td><code>playerEliminated</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
       <tr><td><code>buybackWindowOpen</code> / <code>buybackWindowClosed</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, windowMs, closesAt</code> — без цін</td></tr>
-      <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code> / <code>ticketsUpdated</code></td><td><span class="tag private">приватні</span></td><td>див. §6–7; завжди несуть <code>playerId</code> адресата — звіряй зі своїм</td></tr>
+      <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code> / <code>ticketsUpdated</code></td><td><span class="tag private">приватні</span></td><td>див. §7–8; завжди несуть <code>playerId</code> адресата — звіряй зі своїм</td></tr>
       <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — ціни нема (гаманець гравця)</td></tr>
       <tr><td><code>playerDisconnected</code> / <code>playerReconnected</code></td><td><span class="tag bcast">лоббі</span> / <span class="tag private">приватна</span></td><td>реконект несе стан для відновлення UI</td></tr>
       <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId</code>; нагороди нараховує main-server (50 золота учасникам, 20 гемів переможцю)</td></tr>
       <tr><td><code>lobbyCancelled</code> / <code>fightError</code></td><td><span class="tag bcast">лоббі</span></td><td>аварійні; <code>fightError.reason</code> — напр. <code>round_cap_reached</code></td></tr>
     </tbody>
   </table></div>
+  <p class="caption">Рядок ростера скрізь однаковий — у <code>rosterUpdate</code>, у відповідях
+  <code>connect</code> і <code>getLobbyStatus</code>, у <code>beG.getSurvivalStatus</code>:
+  <code>playerId, name, character, flag, clan, isBot, slot, eliminated, eliminatedAtRound, ready</code>
+  (§2). Пиши на нього один парсер і один рядок UI.</p>
 </section>
 
 <section>
-  <h2><span class="num">9</span> Шпаргалка викликів</h2>
+  <h2><span class="num">10</span> Шпаргалка викликів</h2>
   <div class="scroll-x"><table>
     <thead><tr><th>Хочу…</th><th>Виклик</th><th>Куди</th></tr></thead>
     <tbody>
+      <tr><td>Хто записався (до входу)</td><td><code>beG.getSurvivalStatus()</code></td><td>main-server</td></tr>
       <tr><td>Зайти в режим</td><td><code>beG.joinSurvival()</code></td><td>main-server</td></tr>
       <tr><td>Баланс (довідково)</td><td><code>beG.getTickets()</code></td><td>main-server</td></tr>
       <tr><td>Підтвердити себе</td><td><code>survival.connect([token])</code></td><td>survival-server</td></tr>
@@ -479,12 +611,20 @@ stateDiagram-v2
 </section>
 
 <section>
-  <h2><span class="num">10</span> Підводні камені — кожен уже хтось ловив</h2>
+  <h2><span class="num">11</span> Підводні камені — кожен уже хтось ловив</h2>
   <ol class="steps">
     <li><b><code>onboardingStarted.players</code> — число, а не масив.</b> Склад завжди бери з
       <code>roster</code>; полю, якому не довіряєш за типом, став guard.</li>
     <li><b>Ростер новачка — лише у відповіді <code>connect</code>.</b> Викинеш — лоббі буде
       «порожнім» до першої зміни складу.</li>
+    <li><b>Ростер не можна сортувати.</b> Порядок реєстрації — контракт, а номер рядка
+      береться з індексу масиву, бо <code>slot</code> до старту бою <code>null</code>.
+      Сортування «за слотом» на екрані бронювання дає список із номерами, які нічого не
+      значать, і зникаючі рядки після кожного оновлення.</li>
+    <li><b>Екран бронювання не будується на <code>survival.connect</code>.</b> Токен живе
+      10 хв і коштує тікет; список учасників до входу дає <code>beG.getSurvivalStatus</code> (§2).</li>
+    <li><b><code>clan</code> — це назва, а не id.</b> Резолвити нічого не треба, показуй як є;
+      <code>""</code> означає «без клану» (і так завжди у ботів) — тоді плашки просто немає.</li>
     <li><b>Підписка на події — до відповіді <code>connect</code></b>, інакше загубиш перший
       <code>ticketsUpdated</code>.</li>
     <li><b>Аргумент завжди один — масив.</b> <code>connect(token)</code> = «Invalid token»

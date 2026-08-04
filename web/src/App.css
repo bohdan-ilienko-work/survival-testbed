@@ -148,3 +148,59 @@ button.big { padding: 9px 20px; font-size: 14px; }
 
 .error.stale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .error.stale button { margin-left: auto; }
+
+/* ─── 1а. Реєстрація (beG.getSurvivalStatus) ─────────────────────────────────
+   Sits below the match panels and is always on screen: it is the main-menu booking
+   popup, which exists long before there is a step or a survival connection. */
+.booking { margin-top: 14px; }
+.booking .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.booking .head h2 { margin: 0; }
+.booking .reg {
+  padding: 3px 10px; border-radius: 999px; font-size: 12px;
+  background: #232b3f; color: var(--muted); border: 1px solid var(--line);
+}
+.booking .reg.yes { background: rgba(62, 207, 142, .15); color: var(--ok); border-color: rgba(62, 207, 142, .4); }
+.booking .reg.no { background: rgba(255, 182, 72, .12); color: var(--warn); border-color: rgba(255, 182, 72, .4); }
+.booking .fetched { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+.booking .top { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.booking .count b { font-size: 26px; font-weight: 700; }
+.booking .count span { color: var(--muted); }
+.booking .meta { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; color: var(--muted); font-size: 13px; }
+.booking .meta b { color: var(--text); }
+.booking .until { color: var(--ok); font-weight: 600; margin: 6px 0 12px; }
+.booking .deny { color: var(--warn); }
+.booking .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.booking .hint.small { font-size: 12px; flex: 1 1 260px; }
+
+.rosterbox { border: 1px solid var(--line); border-radius: 10px; background: #131a28; overflow: hidden; }
+.rosterbox .rhead, .roster li {
+  display: grid; grid-template-columns: 30px 26px 28px 1fr auto;
+  gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line);
+}
+.rosterbox .rhead {
+  color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  background: #101726;
+}
+/* the header cells share the row grid, so they need the same edge alignment */
+.rosterbox .rhead .num { text-align: right; }
+.rosterbox .rhead .tail { justify-self: end; }
+.roster { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+.roster li:last-child { border-bottom: none; }
+.roster li.me { background: rgba(91, 140, 255, .08); }
+.roster li.out { opacity: .45; }
+.roster .num { color: var(--muted); font-size: 12px; text-align: right; }
+.roster .flag { font-size: 15px; }
+.roster .ch {
+  width: 24px; height: 24px; border-radius: 50%; background: #232b3f; border: 1px solid var(--line);
+  color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; justify-content: center;
+}
+.roster .nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster .tail { display: flex; gap: 6px; align-items: center; justify-self: end; }
+.roster .clan {
+  color: var(--accent); font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  background: rgba(91, 140, 255, .12); max-width: 160px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.roster .bot { color: var(--muted); font-size: 11px; }
+.roster .mine { color: var(--accent); font-size: 11px; font-weight: 600; }

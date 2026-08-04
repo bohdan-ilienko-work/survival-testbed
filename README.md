@@ -194,8 +194,14 @@ const pl=require("/home/server/node_modules/@grpc/proto-loader"),
       s=g.loadPackageDefinition(pl.loadSync("/home/server/survival_server.proto")).survival_api,
       c=new s.SurvivalServerAPI("survival-server:5010", g.credentials.createInsecure());
 c.getActiveLobby({json:"{}"},(e,r)=>{console.log(e?e.message:r.result);process.exit(0)});'
-# -> {"lobbyId":"…","state":"BOOKING","playerCount":0,"scheduledStartAt":"…","round":0}
+# -> {"lobbyId":"…","state":"BOOKING","playerCount":0,"activePlayerCount":0,
+#     "scheduledStartAt":"…","round":0,"roster":[]}
 ```
+
+`roster` is the full sign-up list (one row per player: `playerId, name, character,
+flag, clan, isBot, slot, eliminated, eliminatedAtRound, ready`, in registration
+order). main-server passes it straight through `beG.getSurvivalStatus`, which is
+what the web client's booking panel draws — see `HOW-TO-TEST.md`.
 
 ## Services intentionally NOT in this testbed
 

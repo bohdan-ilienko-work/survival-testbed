@@ -116,6 +116,21 @@ export class Gateway {
     return this.send<any>({ type: 'grantTickets', amount });
   }
 
+  /**
+   * Testbed convenience: a fresh mock account is in no clan, so the clan column of the booking
+   * roster would render empty for every row and the field would never be exercised. This puts
+   * THIS tab's player into a clan — creating it when it does not exist yet (`created: true`),
+   * otherwise just adding the player to it — through main-server's unguarded `adminApi`, which
+   * works on the in-memory clan registry so main-server sees it at once (a raw mongo write
+   * would stay invisible to the cached player).
+   *
+   * The lobby copies the clan NAME into the roster row at RegisterPlayer time and never
+   * refreshes it, so this has to be done BEFORE joining to change anything on screen.
+   */
+  mockClan(name?: string) {
+    return this.send<{ clanId: string; name: string; created: boolean }>({ type: 'mockClan', name });
+  }
+
   resetUser() {
     return this.send<any>({ type: 'resetUser' });
   }

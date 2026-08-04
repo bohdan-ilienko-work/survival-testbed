@@ -16,9 +16,26 @@ export type Step =
   | 'spectator'    // 8б. Вибув
   | 'finished';    // 10. Фінал
 
+/**
+ * One roster row. Everything but `playerId` is optional on purpose: the same type is filled
+ * from the lobby broadcasts (`rosterUpdate`, `fightStarted`, `survival.connect`) AND from the
+ * booking roster beG.getSurvivalStatus passes through, and those sources do not all carry the
+ * same fields.
+ */
 export interface LobbyPlayer {
   playerId: string;
   name?: string;
+  /** avatar index picked at sign-up; the testbed has no art, so it is rendered as a number */
+  character?: number;
+  /** ISO-3166 alpha-2 country code — 'UN' when main-server could not geolocate the IP */
+  flag?: string;
+  /**
+   * Clan NAME, '' when the player is in no clan (bots are always ''). survival-server has no
+   * clans collection, so main-server resolves the clan id off the player document — but only
+   * once, inside RegisterPlayer, so the row keeps the clan the player had when they signed up.
+   */
+  clan?: string;
+  /** null for the whole of BOOKING — slots are handed out when on-boarding starts */
   slot?: number | null;
   isBot?: boolean;
   eliminated?: boolean;
@@ -340,6 +357,95 @@ export function applyTicketBalance(
     buybackAffordable: state.buybackUnavailableReason
       ? false
       : canAfford(state.buybackCost, tickets) ?? state.buybackAffordable,
+  };
+}
+
+// ─── the booking screen (beG.getSurvivalStatus) ───────────────────────────────
+
+/**
+ * The lobby object main-server passes straight through from survival-server's GetActiveLobby.
+ *
+ * `roster` is the whole point of it: the booking popup is shown in the main menu HOURS before
+ * the match while a survival connect token lives ten minutes, so there is no JSTP session to
+ * ask — this reply is the only way that screen can list who signed up.
+ */
+export interface BookingLobby {
+  lobbyId?: string;
+  state?: string;
+  /** everybody registered, bots included */
+  playerCount?: number;
+  /** those still in the fight — equal to playerCount while the lobby is still booking */
+  activePlayerCount?: number;
+  /** ISO string */
+  scheduledStartAt?: string;
+  round?: number;
+  /**
+   * REGISTRATION ORDER IS PART OF THE CONTRACT: the booking screen numbers its rows from the
+   * array index, because `slot` stays null until on-boarding hands the slots out. So the
+   * roster is carried through as it arrived — never sorted, filtered or de-duplicated.
+   */
+  roster: LobbyPlayer[];
+}
+
+/** A beG.getSurvivalStatus reply, guarded. */
+export interface BookingStatus {
+  /** false = survival-server never answered, so there is nothing to register for at all */
+  available?: boolean;
+  /** am I in THIS lobby — main-server matches its paid entry against the current lobbyId */
+  registered?: boolean;
+  lobby: BookingLobby | null;
+  tickets?: number;
+  entryCost?: number;
+  freeDailyTickets?: number;
+  /**
+   * How many free daily tickets THIS call granted — a count, not a flag: getStatus returns
+   * claimFreeDailyTickets()'s result, which is 0 when today's ticket was already taken.
+   * Read as a boolean it came back undefined every single time.
+   */
+  freeDailyGranted?: number;
+  nextFreeDailyAt?: string;
+  /** when this snapshot was taken — nothing pushes it, the screen has to poll */
+  fetchedAt: number;
+}
+
+/**
+ * Read a beG.getSurvivalStatus reply.
+ *
+ * Same discipline as asPlayers above and for the same reason: this panel renders for a player
+ * who has joined nothing, so a missing or renamed field has to degrade into "the server did not
+ * say" instead of throwing inside a render. `lobby: null` (nothing is being booked yet) is a
+ * legitimate answer and is deliberately kept distinct from `available: false` (survival-server
+ * did not answer at all) — the two need different words on screen.
+ */
+export function readBookingStatus(reply: unknown): BookingStatus {
+  const r: any = reply && typeof reply === 'object' ? reply : {};
+  const raw = r.lobby;
+  const lobby: BookingLobby | null =
+    raw && typeof raw === 'object'
+      ? {
+          // asTag is "a non-empty string or nothing", which is exactly what an id, a state
+          // name and an ISO timestamp are here
+          lobbyId: asTag(raw.lobbyId),
+          state: asTag(raw.state),
+          playerCount: asNum(raw.playerCount),
+          activePlayerCount: asNum(raw.activePlayerCount),
+          scheduledStartAt: asTag(raw.scheduledStartAt),
+          round: asNum(raw.round),
+          // no lobby means no roster, and an empty roster is not the same as "not an array"
+          roster: asPlayers(raw.roster, []),
+        }
+      : null;
+
+  return {
+    available: asBool(r.available),
+    registered: asBool(r.registered),
+    lobby,
+    tickets: asNum(r.tickets),
+    entryCost: asNum(r.entryCost),
+    freeDailyTickets: asNum(r.freeDailyTickets),
+    freeDailyGranted: asNum(r.freeDailyGranted),
+    nextFreeDailyAt: asTag(r.nextFreeDailyAt),
+    fetchedAt: Date.now(),
   };
 }
 

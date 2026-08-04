@@ -6,8 +6,11 @@ import {
   errorText,
   initialState,
   reasonText,
+  readBookingStatus,
   reduce,
   stepLabel,
+  type BookingStatus,
+  type LobbyPlayer,
   type SurvivalState,
 } from './survival';
 import { MapPicker } from './MapPicker';
@@ -41,6 +44,10 @@ export default function App() {
   });
   const [session, setSession] = useState<any>(null);
   const [state, setState] = useState<SurvivalState>(initialState);
+  // Kept OUT of SurvivalState: this is a polled snapshot of main-server's booking screen, not
+  // the live match the survival events build up. Mixing them would let a stale poll overwrite
+  // a roster that broadcasts keep current.
+  const [booking, setBooking] = useState<BookingStatus | null>(null);
   const [events, setEvents] = useState<ServerEvent[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -136,6 +143,9 @@ export default function App() {
       if (s?.accountId && s?.deviceId) saveAccount({ accountId: s.accountId, deviceId: s.deviceId });
       setSession(s);
       setState(initialState);
+      // The booking snapshot belongs to the PREVIOUS account — above all its «зареєстрований»
+      // pill, which would otherwise claim a brand-new player has already paid for a seat.
+      setBooking(null);
       return { tab: s?.tabId, playerId: s?.playerId };
     }).catch(() => undefined);
 
@@ -157,6 +167,46 @@ export default function App() {
       // beG.getTickets also grants the free daily ticket, so its reply can be a real movement
       setState((s) => applyTicketBalance(s, res?.tickets ?? res, { reason: 'refresh' }));
       return res;
+    }).catch(() => undefined);
+
+  /**
+   * The booking / registration screen, and the only call that can draw it.
+   *
+   * It lives in the main menu hours before the match, when the player has no survival
+   * connection at all (a connect token lives ten minutes), so main-server's
+   * beG.getSurvivalStatus is the ONLY source of the sign-up list — that is why the roster now
+   * travels with it. Nothing here touches `status.survival` on purpose: the whole point of the
+   * panel is that it works for a player who has never joined and is connected to nothing but
+   * main-server.
+   *
+   * Not wrapped in run() itself so «Створити клан» can refresh without nesting two run()s —
+   * the inner finally would clear `busy` while the outer call is still going.
+   */
+  const fetchBooking = useCallback(async () => {
+    const res = await gw().call<any>('main', 'beG', 'getSurvivalStatus', []);
+    const status = readBookingStatus(res);
+    setBooking(status);
+    // getStatus claims the free daily ticket on its way, exactly like beG.getTickets, so its
+    // balance can be a real movement — and it goes through applyTicketBalance for the same
+    // reason the two top-ups above do.
+    setState((s) => applyTicketBalance(s, status.tickets, { reason: 'status' }));
+    return res;
+  }, []);
+
+  const bookingStatus = () => run('beG.getSurvivalStatus', fetchBooking).catch(() => undefined);
+
+  /**
+   * Testbed convenience, not a product feature: fresh mock accounts are clanless, so without
+   * this the roster's clan column is empty on every row and the new field goes untested.
+   * The clan NAME is copied into the roster row when RegisterPlayer runs and is never
+   * refreshed afterwards, so a clan created after «Зайти в Survival» only shows up in the
+   * NEXT lobby — hence the hint next to the button.
+   */
+  const mockClan = () =>
+    run('mockClan (тестовий клан)', async () => {
+      const clan = await gw().mockClan();
+      await fetchBooking();
+      return clan;
     }).catch(() => undefined);
 
   // "Insufficient tickets" is the usual first-run trap: top up once and retry
@@ -411,6 +461,11 @@ export default function App() {
         <button onClick={() => mockUser(true)} disabled={!!busy || !gwOnline}>Новий гравець</button>
         <button onClick={refreshTickets} disabled={!!busy || !session?.playerId}>Тікети</button>
         <button onClick={grantTickets} disabled={!!busy || !session?.playerId}>+50 🎟</button>
+        {/* main-server only: this is the pre-match booking screen, so it must stay usable
+            while survival is not connected — do not add a survival gate here */}
+        <button onClick={bookingStatus} disabled={!!busy || !session?.playerId}>
+          Хто зареєстрований
+        </button>
         <button onClick={joinSurvival} disabled={!!busy || !session?.playerId} className="primary">
           Зайти в Survival
         </button>
@@ -513,6 +568,17 @@ export default function App() {
               </button>
             </div>
           )}
+          {/* Below the match panels, and never gated on a step or on the survival socket:
+              the booking popup belongs to the main menu, where neither exists yet. */}
+          <BookingPanel
+            status={booking}
+            me={playerId}
+            now={now}
+            busy={!!busy}
+            onRefresh={bookingStatus}
+            onMockClan={mockClan}
+          />
+
           <details className="raw">
             <summary>Стан клієнта (як його бачить UI)</summary>
             <table>
@@ -583,6 +649,235 @@ export default function App() {
         </aside>
       </main>
     </div>
+  );
+}
+
+/**
+ * The flag arrives as an ISO-3166 alpha-2 code ('UA', or 'UN' when main-server could not
+ * geolocate the sign-up IP), never as an emoji — so it is composed here from the two regional
+ * indicators. Anything that is not exactly two ASCII letters is shown verbatim instead of being
+ * turned into two random glyphs, which is what a renamed field would look like.
+ */
+const flagEmoji = (code: unknown): string => {
+  const cc = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (!/^[A-Z]{2}$/.test(cc)) return cc || '🏳';
+  return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+};
+
+/** 1 гравець · 2 гравці · 5 гравців — this count is the headline, so it has to agree. */
+const playersWord = (n: number): string => {
+  const tens = n % 100;
+  const ones = n % 10;
+  if (ones === 1 && tens !== 11) return 'гравець';
+  if (ones >= 2 && ones <= 4 && (tens < 12 || tens > 14)) return 'гравці';
+  return 'гравців';
+};
+
+/**
+ * "через 3 год 12 хв". The match is scheduled hours ahead, so seconds are noise until the last
+ * minutes; a start that has already passed says so rather than counting backwards.
+ */
+const untilText = (ms: number): string => {
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'старт уже настав';
+  const total = Math.round(ms / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `через ${hours} год ${minutes} хв`;
+  if (minutes > 0) return `через ${minutes} хв ${total % 60} с`;
+  return `через ${total} с`;
+};
+
+/**
+ * 1а. Реєстрація — the booking popup exactly as the main menu draws it, long before the match.
+ *
+ * Everything on it comes from ONE beG.getSurvivalStatus reply, over the main-server connection,
+ * with no survival session anywhere: that is the path this panel exists to prove. The roster is
+ * rendered in the order it arrived (registration order) and numbered from the array index,
+ * because `slot` is null for the whole of BOOKING — sorting it, filtering it or numbering it by
+ * slot would all break the contract the server side documents.
+ */
+function BookingPanel({
+  status,
+  me,
+  now,
+  busy,
+  onRefresh,
+  onMockClan,
+}: {
+  status: BookingStatus | null;
+  me?: string;
+  now: number;
+  busy: boolean;
+  onRefresh: () => void;
+  onMockClan: () => void;
+}) {
+  const lobby = status?.lobby ?? null;
+  const roster = lobby?.roster ?? [];
+  // playerCount is the server's own total (bots included). The roster length is only a fallback
+  // for a reply that did not carry the count — the two agree in every normal answer.
+  const total = lobby?.playerCount ?? roster.length;
+  const startsAt = lobby?.scheduledStartAt ? Date.parse(lobby.scheduledStartAt) : NaN;
+
+  const registered = status?.registered;
+  const regLabel =
+    registered === undefined
+      ? 'сервер не сказав'
+      : registered
+        ? '✔ ти зареєстрований'
+        : '✖ ти не зареєстрований';
+
+  return (
+    <div className="panel booking">
+      <div className="head">
+        <h2>Реєстрація на матч</h2>
+        {status && (
+          <span className={`reg ${registered === undefined ? '' : registered ? 'yes' : 'no'}`}>
+            {regLabel}
+          </span>
+        )}
+        {status && (
+          <span className="fetched">
+            beG.getSurvivalStatus · {new Date(status.fetchedAt).toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
+      {!status ? (
+        <p className="hint">
+          Натисни «Хто зареєстрований» — це той самий <code>beG.getSurvivalStatus</code>, яким
+          головне меню показує список записаних задовго до матчу. Зʼєднання з survival-server
+          для цього не потрібне.
+        </p>
+      ) : status.available === false ? (
+        // available:false means survival-server did not answer main-server at all — a different
+        // thing from "лоббі ще немає", so it gets its own words instead of an empty list.
+        <p className="deny">
+          Survival недоступний (<code>available: false</code>) — main-server не достукався до
+          survival-server, тож реєстрації зараз немає взагалі.
+        </p>
+      ) : !lobby ? (
+        <p className="deny">
+          Активного лоббі немає (<code>lobby: null</code>) — записуватись поки нема куди.
+          Наступне лоббі створюється за розкладом.
+        </p>
+      ) : (
+        <>
+          <div className="top">
+            <div className="count">
+              <b>{total}</b> <span>{playersWord(total)} зареєстровано</span>
+            </div>
+            <div className="meta">
+              <span>
+                стан: <b>{lobby.state ?? '—'}</b>
+              </span>
+              {Number.isFinite(startsAt) && (
+                <span>
+                  старт: <b>{new Date(startsAt).toLocaleString()}</b>
+                </span>
+              )}
+              {lobby.round !== undefined && lobby.round > 0 && (
+                <span>
+                  раунд: <b>{lobby.round}</b>
+                </span>
+              )}
+              {status.entryCost !== undefined && <span>вхід: 🎟 {status.entryCost}</span>}
+            </div>
+          </div>
+
+          {Number.isFinite(startsAt) && <p className="until">{untilText(startsAt - now)}</p>}
+
+          {roster.length === 0 ? (
+            <p className="hint">Ще ніхто не зареєструвався.</p>
+          ) : (
+            <div className="rosterbox">
+              <div className="rhead">
+                <span className="num">№</span>
+                <span>прап.</span>
+                <span>перс.</span>
+                <span>гравець</span>
+                <span className="tail">клан</span>
+              </div>
+              <ol className="roster">
+                {roster.map((entry, index) => (
+                  <RosterRow
+                    // Registration order is the contract, so duplicates must NOT be collapsed:
+                    // the index is what keeps the key unique even if the server ever repeats a
+                    // playerId, and the row number below comes from that same index.
+                    key={`${index}:${entry?.playerId ?? ''}`}
+                    entry={entry}
+                    index={index}
+                    me={me}
+                  />
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {lobby.activePlayerCount !== undefined && lobby.activePlayerCount !== total && (
+            <p className="answered">
+              ще в грі: {lobby.activePlayerCount} з {total}
+            </p>
+          )}
+        </>
+      )}
+
+      {/* Both are gated on `me` exactly like their toolbar twins: before sign-in main-server's
+          beG guard (`if (connection.player)`) never calls back, so an ungated «Оновити список»
+          buys the tester a 20 s gateway timeout instead of an error. */}
+      <div className="row">
+        <button onClick={onRefresh} disabled={busy || !me}>
+          Оновити список
+        </button>
+        <button onClick={onMockClan} disabled={busy || !me}>
+          Створити клан
+        </button>
+        <span className="hint small">
+          «Створити клан» — суто тестова кнопка (adminApi), щоб колонка «клан» не була порожньою.
+          Клан підставляється в ростер у момент реєстрації, тож тисни її ДО «Зайти в Survival».
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One booking row: number, flag, character, nickname, clan.
+ * Each field is re-checked here rather than trusted: the roster is read straight off the wire
+ * (see readBookingStatus, which only guarantees it is an array), so a row that is not an object
+ * at all must render as a dash instead of taking the whole panel down with it.
+ */
+function RosterRow({ entry, index, me }: { entry: LobbyPlayer; index: number; me?: string }) {
+  const row: LobbyPlayer = entry && typeof entry === 'object' ? entry : ({} as LobbyPlayer);
+  const id = typeof row.playerId === 'string' ? row.playerId : '';
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  // '' is the contracted value for "no clan" (bots always), so an empty column is a real answer
+  const clan = typeof row.clan === 'string' ? row.clan.trim() : '';
+  const mine = !!me && id === me;
+
+  return (
+    <li className={`${mine ? 'me' : ''} ${row.eliminated ? 'out' : ''}`}>
+      {/* 1..N from the ARRAY INDEX: `slot` is null for the whole of BOOKING */}
+      <span className="num">{index + 1}</span>
+      <span className="flag" title={typeof row.flag === 'string' ? row.flag : 'прапор невідомий'}>
+        {flagEmoji(row.flag)}
+      </span>
+      <span className="ch" title={`персонаж ${row.character ?? '—'}`}>
+        {typeof row.character === 'number' ? row.character : '—'}
+      </span>
+      <span className="nick" title={id}>
+        {name || (id ? id.slice(0, 12) : '—')}
+      </span>
+      <span className="tail">
+        {clan && (
+          <span className="clan" title="клан">
+            {clan}
+          </span>
+        )}
+        {row.isBot && <span className="bot">бот</span>}
+        {mine && <span className="mine">я</span>}
+      </span>
+    </li>
   );
 }
 

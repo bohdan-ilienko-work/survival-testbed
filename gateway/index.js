@@ -17,6 +17,7 @@
 //   { id, type: 'call',     target, iface, method, args }
 //   { id, type: 'mockUser', account }   // account = {accountId, deviceId} to reuse, or null for a fresh player
 //   { id, type: 'grantTickets', amount }
+//   { id, type: 'mockClan', name }      // put this tab's player in a clan; name is only used by the call that creates it
 //   { id, type: 'state' }
 // gateway -> browser:
 //   { id, type: 'result', ok, data | error }
@@ -36,7 +37,11 @@ const TARGETS = {
     protocol: process.env.MAIN_SERVER_PROTOCOL || 'net',
     host: process.env.MAIN_SERVER_HOST || '127.0.0.1',
     port: parseInt(process.env.MAIN_SERVER_PORT || '7000', 10),
-    interfaces: ['beG', 'auth'],
+    // adminApi is a TESTBED-ONLY convenience. main-server exposes it unguarded (no
+    // auth, no level, no payment checks — see applications/beGenius/api/adminApi/), and
+    // it is the only way to hand a freshly signed-up mock account a clan while keeping
+    // main-server's in-memory clan registry in sync. See mockClan() below.
+    interfaces: ['beG', 'auth', 'adminApi'],
   },
   survival: {
     app: 'survival',
@@ -235,6 +240,130 @@ function grantTickets(playerId, amount) {
   });
 }
 
+// ─── mock clan ────────────────────────────────────────────────────────────────
+
+// Same shape of problem as grantTickets above, same rule: fresh testbed accounts have
+// no clan, so every row of the survival booking roster would render an empty clan name.
+// main-server keeps clans in an IN-MEMORY registry (playerId_to_clan / clanId_to_clan in
+// lib/clans.js) and RegisterPlayer resolves the name through api.beGenius.clans.getClan(),
+// so a raw mongo write would be completely invisible to the running process. Everything
+// therefore goes through main-server's unguarded `adminApi.clanAdmin`, which mutates that
+// registry (and refreshes the online member's client context) exactly like a real join.
+
+// fieldValidators.name in main-server's lib/clans.js is `trimmed, 1..20 characters`, and
+// adminCreateClan rejects the WHOLE create with an opaque "Invalid clan fields: name".
+// Keep the default comfortably inside the limit and clamp anything the UI supplies.
+const CLAN_NAME_MAX = 20;
+const DEFAULT_CLAN_NAME = 'Testbed Clan';
+
+// ONE clan per gateway PROCESS, not per tab. The whole point of the mock is a roster in
+// which several rows share a clan name, and every tab is a different player on its own
+// upstream connection — so the first tab to ask creates the clan and every later tab is
+// added to that same one with created:false. A supplied name is consequently only honoured
+// by the call that actually creates the clan; ignoring it afterwards is deliberate, because
+// a second tab asking for a different name must still end up in the FIRST tab's clan.
+let lastCreatedClan = null; // { clanId, name }
+
+function normalizeClanName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  const clamped = (trimmed || DEFAULT_CLAN_NAME).slice(0, CLAN_NAME_MAX).trim();
+  return clamped || DEFAULT_CLAN_NAME;
+}
+
+// The admin clan handlers reject with plain Errors whose TEXT carries the clan id
+// ("Player already in clan 12345678 — detach first"). Depending on the hop that text
+// arrives either as a RemoteError message or as a JSON blob (see Client.call, which
+// JSON.stringify()s non-string errors), so match on the string rather than on any
+// structured field — there is no structured field to match on.
+const clanErrorText = (err) => String((err && err.message) || err || '');
+const existingClanIdFromError = (err) => {
+  const m = /already in clan\s+([0-9A-Za-z]+)/.exec(clanErrorText(err));
+  return m ? m[1] : null;
+};
+const isAlreadyThisClanError = (err) => /already in this clan/i.test(clanErrorText(err));
+const isMissingClanError = (err) => /clan not found/i.test(clanErrorText(err));
+
+// `get` answers { clan: {...} | null } — null for an unknown or disbanded id. Guard the
+// shape instead of trusting it, and never fail mockClan over a missing name: the roster
+// gets its clan names from beG.getSurvivalStatus, this one is only for the log/toast.
+async function readClanName(client, clanId) {
+  try {
+    const res = await client.call('main', 'adminApi', 'clanAdmin', [{ action: 'get', clanId }]);
+    const clan = res && res.clan;
+    return clan && typeof clan.name === 'string' ? clan.name : '';
+  } catch {
+    return '';
+  }
+}
+
+async function mockClan(client, requestedName) {
+  if (!client.session || !client.session.playerId) throw new Error('sign in first');
+  const playerId = client.session.playerId;
+  const name = normalizeClanName(requestedName);
+
+  if (lastCreatedClan) {
+    try {
+      await client.call('main', 'adminApi', 'clanAdmin', [
+        { action: 'addMember', clanId: lastCreatedClan.clanId, playerId },
+      ]);
+      client.log('joined clan', lastCreatedClan.clanId, `(${lastCreatedClan.name})`);
+      return { ...lastCreatedClan, created: false };
+    } catch (err) {
+      // Idempotent: re-asking after the tab already joined is a success, not an error.
+      if (isAlreadyThisClanError(err)) return { ...lastCreatedClan, created: false };
+
+      // The player belongs to some OTHER clan (a reloaded tab whose account was created
+      // before the gateway restarted). Report that clan; do not touch lastCreatedClan,
+      // which is still perfectly valid for the tabs that are not in a clan yet.
+      const otherId = existingClanIdFromError(err);
+      if (otherId) {
+        const otherName = await readClanName(client, otherId);
+        client.log('already in clan', otherId, `(${otherName})`);
+        return { clanId: otherId, name: otherName, created: false };
+      }
+
+      // main-server was restarted (or the clan was disbanded) under us, so the remembered
+      // id no longer resolves. Forget it and fall through to creating a fresh one.
+      if (!isMissingClanError(err)) throw err;
+      client.log('remembered clan', lastCreatedClan.clanId, 'is gone, creating a new one');
+      lastCreatedClan = null;
+    }
+  }
+
+  try {
+    // description is left out on purpose: adminCreateClan defaults it to the name, which
+    // always satisfies its own 1..300 validator once the name above is valid.
+    const res = await client.call('main', 'adminApi', 'clanAdmin', [
+      { action: 'create', leaderPlayerId: playerId, params: { name } },
+    ]);
+
+    // adminCreateClan answers { clan: { id, name, ... } }; tolerate a flat clanId too
+    // rather than reading res.clan.id blind.
+    const clan = (res && res.clan) || null;
+    const clanId = String((res && res.clanId) || (clan && clan.id) || '');
+    if (!clanId) throw new Error('clanAdmin.create returned no clan id');
+
+    // main-server escapes rich-text tags in the name, so echo back what it stored.
+    lastCreatedClan = {
+      clanId,
+      name: (clan && typeof clan.name === 'string' && clan.name) || name,
+    };
+    client.log('created clan', clanId, `(${lastCreatedClan.name})`);
+    return { ...lastCreatedClan, created: true };
+  } catch (err) {
+    // adminCreateClan refuses outright for a player who already has a clan. That is the
+    // normal case for a tab whose account outlived this process, so turn it into a
+    // created:false answer and adopt the clan, so later tabs join it instead of piling up
+    // one clan per tab.
+    const existingId = existingClanIdFromError(err);
+    if (!existingId) throw err;
+    const existingName = await readClanName(client, existingId);
+    if (!lastCreatedClan) lastCreatedClan = { clanId: existingId, name: existingName };
+    client.log('already in clan', existingId, `(${existingName})`);
+    return { clanId: existingId, name: existingName, created: false };
+  }
+}
+
 // ─── websocket API for the browser ────────────────────────────────────────────
 
 const wss = new WebSocketServer({ port: PORT });
@@ -288,6 +417,9 @@ wss.on('connection', (ws) => {
           reply(true, await grantTickets(client.session.playerId, msg.amount || 50));
           break;
         }
+        case 'mockClan':
+          reply(true, await mockClan(client, msg.name));
+          break;
         case 'state':
           reply(true, { session: client.session, connected: [...client.connections.keys()] });
           break;

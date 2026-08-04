@@ -8,6 +8,11 @@
 // the real beG.joinSurvival RPC, connects to survival-server with the returned
 // token and then answers every round. Prints the whole flow and exits non-zero if
 // the match never finishes (the classic "fight hangs forever" failure).
+//
+// Registration and the socket are deliberately two separate phases, the way a real client
+// does it: beG.getSurvivalStatus is probed once before anybody joins and once after
+// everybody has, while not a single survival-server connection is open — that reply is the
+// only thing the booking/registration popup ever gets to build its participant list from.
 
 const path = require('path');
 const jstp = require(path.join(__dirname, '..', 'gateway', 'node_modules', 'metarhia-jstp'));
@@ -154,12 +159,28 @@ async function makePlayer(index) {
   return { index, mainApi, accountId, playerId, name: `p${index}` };
 }
 
-async function joinSurvival(p) {
+/**
+ * The registration half, and nothing else. Split from the socket half on purpose: a real
+ * client books its seat from the main menu and only connects when the match is about to
+ * start, and in between the booking popup has beG.getSurvivalStatus and nothing else. Doing
+ * the same here is what lets the roster probe run with no survival-server socket open at all
+ * — otherwise the roster it sees could have arrived over the JSTP session and would prove
+ * nothing. The seat survives the wait: survival.connect only needs the token, which lives
+ * ten minutes.
+ */
+async function registerSurvival(p) {
   const res = await call(p.mainApi, 'beG', 'joinSurvival', []);
   // Counted, not assumed: a failed join throws and kills the run, but the exact-fee summary
   // line below must state the positive fact, not infer it from "we did not crash".
   seen.joinsOk++;
+  p.joinResult = res;
   log(`player${p.index}: joinSurvival →`, JSON.stringify(res).slice(0, 160));
+  return res;
+}
+
+/** The socket half: redeem the token registerSurvival got and bind the JSTP session. */
+async function connectSurvival(p) {
+  const res = p.joinResult;
 
   const { connection, api } = await connect('net', 'survival', ['survival'], SURVIVAL.port, SURVIVAL.host);
   p.survivalApi = api;
@@ -200,6 +221,14 @@ const seen = {
   /** successful beG.joinSurvival calls — with --tickets 0 this proves exact-fee entry works */
   joinsOk: 0,
 
+  // ─── the booking roster, read with no survival-server socket open ──────────
+  /** every beG.getSurvivalStatus probe in order — the registration popup's whole data source */
+  bookingProbes: [],
+  /** where our own players sit in the post-registration booking roster; -1 = not listed at all */
+  bookingSelfIndices: [],
+  /** roster rows the popup could not render, field by field (kept apart so errors stay readable) */
+  rosterShapeIssues: [],
+
   // ─── the wallet pushes, so a regression is caught here and not by a human ───
   /** every 'ticketsUpdated' the run received; 0 means the server never pushed */
   ticketsUpdated: 0,
@@ -215,6 +244,220 @@ const seen = {
   /** event names this script does not handle — catches a casing slip in a new event */
   otherEvents: new Set(),
 };
+
+// ─── the booking roster: everything beG.getSurvivalStatus alone has to carry ──
+
+/**
+ * The fields the registration popup draws a row from: the row NUMBER (the array index —
+ * `slot` is still null while the lobby is booking), the country flag, the character avatar,
+ * the nickname and the clan name. A field of the wrong type is a blank cell or a crashed
+ * render, so the types are asserted here instead of being discovered by the UI.
+ * `clan` is the new one: the clan NAME, '' for a player in no clan and for every bot —
+ * never undefined, which is why its type is checked and its value is not.
+ */
+const ROSTER_FIELD_TYPES = {
+  playerId: 'string',
+  name: 'string',
+  character: 'number',
+  flag: 'string',
+  clan: 'string',
+  isBot: 'boolean',
+  eliminated: 'boolean',
+  ready: 'boolean',
+};
+
+/** `slot` is null until on-boarding assigns one, `eliminatedAtRound` until the player is out */
+const ROSTER_NULLABLE_NUMBERS = ['slot', 'eliminatedAtRound'];
+
+/** @returns {string[]} one message per bad field — a wrong type and a missing field read alike */
+function rosterShapeProblems(roster, phase) {
+  const problems = [];
+  roster.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      problems.push(`${phase} roster[${i}] is ${entry === null ? 'null' : typeof entry}, want an object`);
+      return;
+    }
+    const describe = (value) => (value === undefined ? 'missing' : typeof value);
+    for (const [field, type] of Object.entries(ROSTER_FIELD_TYPES)) {
+      if (typeof entry[field] !== type) {
+        problems.push(`${phase} roster[${i}].${field} is ${describe(entry[field])}, want ${type}`);
+      }
+    }
+    for (const field of ROSTER_NULLABLE_NUMBERS) {
+      if (entry[field] !== null && typeof entry[field] !== 'number') {
+        problems.push(`${phase} roster[${i}].${field} is ${describe(entry[field])}, want number|null`);
+      }
+    }
+  });
+  return problems;
+}
+
+/**
+ * One beG.getSurvivalStatus call plus the checks that hold in every phase.
+ *
+ * This RPC is the entire data source of the registration popup: the screen is opened from the
+ * main menu hours before the match and a survival connect token lives ten minutes, so it never
+ * has a survival-server session to ask. The count, the scheduled start, whether I am in and the
+ * participant list all have to arrive on this one reply.
+ *
+ * Nothing off the wire is trusted by declaration — same discipline as web/src/survival.ts's
+ * asPlayers/asNum guards, and for the same reason: a count arriving where a list is declared
+ * must be reported, never quietly used.
+ *
+ * @returns {{ status: object, lobby: object|null, roster: object[] }} `roster` is [] when the
+ * reply carried none, so callers can go on asserting without a null dance.
+ */
+async function readBookingStatus(p, phase) {
+  const status = await call(p.mainApi, 'beG', 'getSurvivalStatus', []);
+  const lobby = status && typeof status.lobby === 'object' && status.lobby !== null ? status.lobby : null;
+
+  const probe = {
+    phase,
+    available: !!(status && status.available === true),
+    registered: !!(status && status.registered === true),
+    lobbyId: lobby ? lobby.lobbyId : null,
+    state: lobby ? lobby.state : null,
+    playerCount: lobby ? lobby.playerCount : null,
+    /** stays null when `roster` was not an array at all — see the check below */
+    roster: null,
+    /** rows carrying a non-empty clan name */
+    clans: null,
+  };
+  seen.bookingProbes.push(probe);
+
+  // main-server flips `available` only once GetActiveLobby has answered, so false means it
+  // could not reach survival-server at all — every join after this point would fail too.
+  if (!probe.available) {
+    seen.errors.push(`getSurvivalStatus (${phase}): available=false, main-server cannot reach survival-server`);
+  }
+
+  if (!lobby) {
+    // Recorded rather than assumed: with no lobby the popup has nothing to list, and only the
+    // phase-specific caller knows whether that is legal (before a join) or a fault (after one).
+    log(`player${p.index}: getSurvivalStatus (${phase}) → NO ACTIVE LOBBY · registered=${probe.registered}`);
+    return { status, lobby: null, roster: [] };
+  }
+
+  // THE new field. Its absence means the deployed survival-server predates the booking roster
+  // (GetActiveLobby used to answer with aggregates only) — exactly the regression this probe
+  // exists for, because the popup then renders "48 players registered" above an empty list.
+  if (!Array.isArray(lobby.roster)) {
+    const got = lobby.roster === undefined ? 'missing' : typeof lobby.roster;
+    seen.errors.push(
+      `getSurvivalStatus (${phase}): lobby.roster is ${got} — survival-server predates the booking roster`,
+    );
+    log(`player${p.index}: getSurvivalStatus (${phase}) → roster MISSING · playerCount=${lobby.playerCount}`);
+    return { status, lobby, roster: [] };
+  }
+
+  const roster = lobby.roster;
+  probe.roster = roster.length;
+
+  // playerCount is the number the popup prints as "N гравців зареєстровано" and the roster is
+  // the list under it. Both come off the same lobby, so a disagreement means the screen lies.
+  if (lobby.playerCount !== roster.length) {
+    seen.errors.push(
+      `getSurvivalStatus (${phase}): playerCount ${JSON.stringify(lobby.playerCount)} != roster length ${roster.length}`,
+    );
+  }
+
+  const problems = rosterShapeProblems(roster, phase);
+  if (problems.length) {
+    seen.rosterShapeIssues.push(...problems);
+    // Capped on the way into `errors`: a lobby of 48 malformed rows would bury every other
+    // line of the summary, and the first few name the broken field just as well.
+    seen.errors.push(...problems.slice(0, 4));
+    if (problems.length > 4) seen.errors.push(`…and ${problems.length - 4} more roster shape problem(s)`);
+  }
+
+  // Rows are numbered 1..N from the array index, so the same playerId twice is two rows for one
+  // person. The lobby keys its players by id, so a duplicate can only have appeared on the wire.
+  const ids = new Set(roster.map((e) => e && e.playerId));
+  if (ids.size !== roster.length) {
+    seen.errors.push(`getSurvivalStatus (${phase}): roster has ${roster.length - ids.size} duplicate playerId(s)`);
+  }
+
+  // An observation, not an assertion: e2e accounts are freshly signed up and belong to no clan,
+  // so 0 is the honest expectation here. The populated-clan path is driven from the web testbed,
+  // which puts its account in a clan through the gateway's mockClan call first.
+  probe.clans = roster.filter((e) => e && typeof e.clan === 'string' && e.clan !== '').length;
+
+  log(
+    `player${p.index}: getSurvivalStatus (${phase}) → lobby ${lobby.lobbyId} · ${lobby.state}` +
+      ` · playerCount=${lobby.playerCount} · roster ${roster.length} (${probe.clans} with a clan)` +
+      ` · registered=${probe.registered} · start ${lobby.scheduledStartAt}`,
+  );
+  return { status, lobby, roster };
+}
+
+/**
+ * The popup as it opens from the main menu: this account has paid for nothing, so the lobby
+ * and its roster have to be readable before it has any relationship with the lobby at all.
+ * @returns {string[]} playerIds already listed — the testbed lobby is shared, so an earlier run
+ * or an open browser tab legitimately leaves rows behind, and the count is worth printing.
+ */
+async function probeBookingBeforeJoin(p) {
+  const { status, lobby, roster } = await readBookingStatus(p, 'before join');
+
+  // `registered` is main-server's paid-entry answer for THIS account and nothing has been
+  // charged yet, so a true here means a paid entry leaked across accounts or across lobbies.
+  if (status && status.registered !== false) {
+    seen.errors.push(
+      `getSurvivalStatus (before join): registered=${JSON.stringify(status.registered)} before any joinSurvival`,
+    );
+  }
+  if (!lobby) log('no lobby to book into yet — the roster assertions below start from nothing');
+  return roster.map((e) => e && e.playerId);
+}
+
+/**
+ * THE assertion of the whole feature: every player holds a seat and not one survival-server
+ * socket exists yet, so a roster arriving here can only have travelled beG.getSurvivalStatus →
+ * main-server → GetActiveLobby. That path is all the booking screen will ever have.
+ */
+async function probeBookingAfterJoin(p, ours, alreadyThere) {
+  const { status, lobby, roster } = await readBookingStatus(p, 'after join');
+
+  if (!lobby) {
+    seen.errors.push('getSurvivalStatus (after join): no active lobby, yet every player just registered into one');
+    return;
+  }
+  if (status && status.registered !== true) {
+    seen.errors.push(
+      `getSurvivalStatus (after join): registered=${JSON.stringify(status.registered)} after joinSurvival succeeded`,
+    );
+  }
+
+  // -1 is the booking screen telling a player their own seat does not exist.
+  const indices = ours.map((q) => roster.findIndex((e) => e && e.playerId === q.playerId));
+  seen.bookingSelfIndices = indices;
+  ours.forEach((q, i) => {
+    if (indices[i] < 0) {
+      seen.errors.push(`getSurvivalStatus (after join): roster does not list player${q.index} (${q.playerId})`);
+    }
+  });
+
+  // ORDER IS PART OF THE CONTRACT (see SurvivalLobby.getRoster): entries come back in
+  // registration order, and the popup numbers its rows 1..N from the array index because
+  // `slot` is still null while booking — so a roster sorted or filtered on the way here
+  // renumbers everyone. Registration in this script is strictly sequential (the join loop
+  // awaits each player before starting the next), so our players' indices are deterministic
+  // and must increase. Only their order RELATIVE to each other is asserted: the testbed lobby
+  // is shared, so rows from an earlier run or an open browser tab sit before ours and can
+  // disappear between the two probes, which shifts absolute positions without breaking the
+  // contract.
+  const found = indices.filter((i) => i >= 0);
+  if (!found.every((idx, i) => i === 0 || found[i - 1] < idx)) {
+    seen.errors.push(
+      `getSurvivalStatus (after join): roster is not in registration order, our players sit at [${indices.join(', ')}]`,
+    );
+  }
+
+  log(
+    `booking roster: ${roster.length} row(s) · our players at [${indices.join(', ')}]` +
+      ` · ${alreadyThere.length} row(s) were already there before we joined`,
+  );
+}
 
 /**
  * Both new events are PRIVATE: the server addresses them to one socket. If a payload
@@ -470,7 +713,21 @@ function checkAgainstSet(set) {
     log('no tickets granted (--tickets 0): wallets hold only the free daily ticket');
   }
 
-  for (const p of players) await joinSurvival(p);
+  // One prober is enough: only `registered` and `tickets` are per-account, the lobby half of
+  // the reply is the same for everyone looking at the booking screen.
+  const prober = players[0];
+
+  // Booking screen, opened before anything is paid for. getSurvivalStatus claims the free daily
+  // ticket exactly as joinSurvival does, and the claim is stamped on the player document — so
+  // this probe cannot inflate a wallet, and --tickets 0 still enters on that one free ticket.
+  const alreadyThere = prober ? await probeBookingBeforeJoin(prober) : [];
+
+  for (const p of players) await registerSurvival(p);
+
+  // Booking screen again, now that every seat is booked and BEFORE the first socket exists.
+  if (prober) await probeBookingAfterJoin(prober, players, alreadyThere);
+
+  for (const p of players) await connectSurvival(p);
 
   log(`${players.length} players in the lobby, waiting for the match…`);
 
@@ -530,6 +787,16 @@ function checkAgainstSet(set) {
       (Object.keys(seen.ticketsReasons).length ? JSON.stringify(seen.ticketsReasons) : 'no reasons'),
   );
   if (missingPush.length) console.log('  ⚠ no push for :', missingPush.join(', '));
+  console.log('booking status :', seen.bookingProbes.length ? JSON.stringify(seen.bookingProbes) : 'never probed');
+  console.log(
+    'booking roster :',
+    seen.bookingSelfIndices.length
+      ? `our players at [${seen.bookingSelfIndices.join(', ')}] (must rise: registration order)`
+      : 'no post-registration probe',
+  );
+  if (seen.rosterShapeIssues.length) {
+    console.log('  ⚠ roster shape :', seen.rosterShapeIssues.slice(0, 6).join('; '));
+  }
   console.log('connect roster :', JSON.stringify(seen.connectRosters));
   console.log('buyBackOffer   :', seen.offers.length ? JSON.stringify(seen.offers) : 'none');
   console.log('buyBack ok     :', seen.buyBackOk);
