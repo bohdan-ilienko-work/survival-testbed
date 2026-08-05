@@ -383,14 +383,20 @@ main > * { min-width: 0; }
 .options button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ─── CHRONO: pairing an event with its year ───────────────────────────────────────
-   Not a list of answer buttons any more: one boxed row per event, its assigned year in the
-   slot on the left and the whole year strip as chips to click on the right. */
+   Not a list of answer buttons any more: a pool of still-free years on top, then one boxed row
+   per event — its assigned year in the slot on the left, the whole year strip as chips on the
+   right. Years are DRAGGED onto a row; the strip stays clickable because drag-and-drop has no
+   keyboard gesture (see the note on ChronoPairing). */
 .chrono { display: grid; gap: var(--sp-2); }
+.chrono .hint.small { font-size: 12px; }
 
 .pair-row {
   display: grid; gap: var(--sp-2);
   padding: var(--sp-3);
   background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-lg);
+  /* the .over highlight below comes and goes as the pointer crosses rows mid-drag — without a
+     transition the whole column strobes */
+  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
 }
 .pair-event { display: flex; align-items: center; gap: var(--sp-3); }
 .pair-text { font-size: 14px; line-height: 20px; }
@@ -426,6 +432,51 @@ main > * { min-width: 0; }
 /* Once the answer is in, every chip goes dead — but lighter than the page-wide .42, because the
    pairing that was SENT is the evidence the tester came for and has to stay readable. */
 .pair-year:disabled { opacity: .6; }
+
+/* ─── the drag layer ───────────────────────────────────────────────────────────────
+   «Вільні роки»: the years nobody holds, and the drop target that UN-pairs. Dashed, like the
+   empty .pair-slot, so the two read as the same "nothing here yet" material. */
+.pair-pool {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-2); border: 1px dashed var(--line); border-radius: var(--r-lg);
+  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.pair-pool-label { color: var(--muted); font-size: 12px; margin-right: var(--sp-2); }
+/* The pool never disappears when it empties: it is still the place a paired year is dropped
+   to release it, and a target you cannot see is a target you cannot aim at. */
+.pair-pool-empty { color: var(--muted); font-size: 12px; }
+/* Pool chips are spans, not buttons (nothing to click there — see ChronoPairing), so they carry
+   the control fill themselves instead of inheriting it from the button rules. */
+.pair-year.free {
+  display: inline-block; line-height: 18px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text);
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.pair-year.free:not(.off):hover { border-color: var(--accent); background: var(--accent-soft); }
+/* The round is closed. `.pair-year:disabled` cannot reach a span, so the pool dims through a
+   class instead — otherwise the free chips stay bright and hoverable next to dead row chips. */
+.pair-year.free.off { opacity: .6; cursor: default; }
+
+/* A chip you can lift has to say so under the pointer, and a text selection started on one
+   would fight the drag. */
+.pair-year[draggable='true'],
+.pair-slot[draggable='true'] { cursor: grab; user-select: none; }
+.pair-year[draggable='true']:active,
+.pair-slot[draggable='true']:active { cursor: grabbing; }
+/* The chip in flight. The browser drags a ghost of it, so the original is faded rather than
+   hidden — a gap opening in the strip would re-flow every chip after it mid-drag. */
+.pair-year.dragging,
+.pair-slot.dragging { opacity: .35; }
+
+/* The target under the pointer. The inset ring rather than a thicker border, so nothing on the
+   row moves by a pixel when the highlight comes and goes. */
+.pair-row.over,
+.pair-pool.over {
+  border-color: var(--accent); border-style: solid;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
 
 /* The submit sits under the rows and is sized by its label, not stretched across the grid. */
 .pair-submit { justify-self: start; margin-top: var(--sp-1); }

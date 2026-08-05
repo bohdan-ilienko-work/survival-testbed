@@ -165,7 +165,14 @@ export interface SurvivalState {
   lobbyId?: string;
   lobbyState?: string;
   scheduledStartAt?: string;
-  /** unix ms when on-boarding closes and the fight starts */
+  /**
+   * ABSOLUTE unix ms when on-boarding closes and the fight starts — the server's own deadline,
+   * never a locally computed `Date.now() + durationMs`. Two reasons it has to be absolute: a
+   * duration is measured from the moment the event is HANDLED, so a tab that got the broadcast
+   * late counted down to a deadline further away than everyone else's; and `onboardingStarted`
+   * fires once, so a tab that connects mid-window never sees it at all and used to show the raw
+   * scheduled time with no countdown while another tab in the same lobby counted down beside it.
+   */
   onboardingEndsAt?: number;
   players: LobbyPlayer[];
   round: number;
@@ -519,6 +526,29 @@ export function readBookingStatus(reply: unknown): BookingStatus {
 }
 
 /**
+ * `onboardingClosesAt` off a survival.connect / survival.getLobbyStatus reply.
+ *
+ * THIS is the field that fixes the missing countdown: `onboardingStarted` is a one-shot
+ * broadcast, so a tab that binds (or re-binds) after the window opened never receives it and had
+ * nothing but the raw scheduled start to show. Both replies carry the deadline instead, so such a
+ * tab can draw the countdown the moment it joins.
+ *
+ * Three answers, all of which have to stay distinct:
+ *   number    — the absolute deadline; adopt it
+ *   null      — the server says this lobby is NOT on-boarding; a deadline we still hold is stale
+ *   undefined — the reply has no such field (an older survival-server); keep whatever we have
+ *
+ * A present-but-unreadable value degrades to `undefined` for the same reason asNum exists: a
+ * NaN deadline would render as «старт через NaN с» instead of falling back to the scheduled time.
+ */
+export function readOnboardingClosesAt(reply: unknown): number | null | undefined {
+  if (!reply || typeof reply !== 'object') return undefined;
+  const r = reply as Record<string, unknown>;
+  if (!('onboardingClosesAt' in r)) return undefined;
+  return r.onboardingClosesAt === null ? null : asNum(r.onboardingClosesAt);
+}
+
+/**
  * Reduce a server event into the survival state.
  * Event names mirror survival-server/src/lobby/lobby.ts and fight/survivalFight.ts.
  */
@@ -543,14 +573,21 @@ export function reduce(state: SurvivalState, ev: ServerEvent, myPlayerId?: strin
         players: asPlayers(p.roster, state.players),
       };
 
-    case 'onboardingStarted':
+    case 'onboardingStarted': {
+      // `closesAt` is the server's absolute deadline and is preferred whenever it is there;
+      // `durationMs` stays as the fallback so an older survival-server keeps working, even
+      // though it is the racy one — see the note on SurvivalState.onboardingEndsAt.
+      const closesAt = asNum(p.closesAt);
+      const durationMs = asNum(p.durationMs);
+      const fromDuration = durationMs === undefined ? undefined : Date.now() + durationMs;
       return {
         ...state,
         step: 'lobby',
         lobbyState: 'ONBOARDING',
-        onboardingEndsAt: p.durationMs ? Date.now() + p.durationMs : undefined,
+        onboardingEndsAt: closesAt ?? fromDuration,
         players: asPlayers(p.roster, state.players),
       };
+    }
 
     case 'fightStarted':
       return {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { DragEvent, ReactNode } from 'react';
 import { Gateway, type ServerEvent, type Target, type TargetState } from './gateway';
 import {
   applyBuyBackQuote,
@@ -8,6 +8,7 @@ import {
   initialState,
   reasonText,
   readBookingStatus,
+  readOnboardingClosesAt,
   reduce,
   stepLabel,
   type BookingStatus,
@@ -439,11 +440,19 @@ export default function App() {
    */
   const bindSurvival = async (token: string) => {
     const bound: any = await gw().call('survival', 'survival', 'connect', [token]);
+    // The same argument as the roster, one field further: this tab missed every broadcast that
+    // went out before the socket existed, and `onboardingStarted` is one of them. Without this
+    // the tab sat in an on-boarding lobby showing only «старт: 05.08.2026, 20:18:56» while the
+    // tab next to it counted the seconds down.
+    const closesAt = readOnboardingClosesAt(bound);
     setState((st) => ({
       ...st,
       players: Array.isArray(bound?.roster) ? bound.roster : st.players,
       lobbyState: bound?.state ?? st.lobbyState,
       lobbyId: bound?.lobbyId ?? st.lobbyId,
+      // undefined = the server said nothing (old build) → keep ours; null = "not on-boarding",
+      // which has to CLEAR a deadline left over from a previous lobby.
+      onboardingEndsAt: closesAt === undefined ? st.onboardingEndsAt : closesAt ?? undefined,
     }));
     return bound;
   };
@@ -599,11 +608,15 @@ export default function App() {
   const lobbyStatus = () =>
     runInDialog('survival.getLobbyStatus', async () => {
       const res: any = await gw().call('survival', 'survival', 'getLobbyStatus', []);
+      // Same absolute deadline the connect reply carries — this call is the manual way back to
+      // it for a tab that already bound but still has no countdown (a missed broadcast).
+      const closesAt = readOnboardingClosesAt(res);
       setState((s) => ({
         ...s,
         lobbyState: res?.state,
         lobbyId: res?.lobbyId ?? s.lobbyId,
         players: Array.isArray(res?.roster) ? res.roster : s.players,
+        onboardingEndsAt: closesAt === undefined ? s.onboardingEndsAt : closesAt ?? undefined,
       }));
       // Kept raw as well: the dialog exists to show what the server actually answered, not only
       // the four fields the reducer keeps.
@@ -1726,12 +1739,22 @@ const clip = (text: string, max = 48) =>
  * duplicate non-(-1) value — one year belongs to exactly one event. So the UI is built so a
  * duplicate cannot even be expressed:
  *
- *  - clicking a year another event already holds SWAPS the two rows (that other event takes
+ *  - dropping a year another event already holds SWAPS the two rows (that other event takes
  *    whatever this one held, possibly nothing). A steal would silently unpair a row further up
- *    the list, and refusing the click would force clear-then-assign for what is nearly always
+ *    the list, and refusing the drop would force clear-then-assign for what is nearly always
  *    meant as "these two are the wrong way round";
- *  - clicking the row's own year un-pairs it, because -1 is a legal value and a testbed has to
- *    be able to send it.
+ *  - dragging a year back into «вільні роки» un-pairs it, because -1 is a legal value and a
+ *    testbed has to be able to send it.
+ *
+ * Every gesture — drop, click, Enter on a focused chip — goes through the SAME assign(). The
+ * swap rule is a server invariant, so a second implementation of it is a second thing that can
+ * drift out of agreement with the validator.
+ *
+ * DRAG IS NOT THE ONLY PATH, deliberately: the per-row year strip stays clickable and behaves
+ * exactly as it did before dragging existed. HTML5 drag-and-drop has no keyboard gesture at all
+ * and is unreliable under touch emulation, and this panel is the one place a tester works
+ * AGAINST A RUNNING ROUND DEADLINE — a gesture that does not take is a round lost, not an
+ * inconvenience. So every year stays reachable with Tab + Enter on every row.
  */
 function ChronoPairing({
   events,
@@ -1770,26 +1793,157 @@ function ChronoPairing({
     onPairs(next);
   };
 
+  /**
+   * Dropped back into the pool. Routed through assign()'s own toggle rather than writing -1
+   * here: that keeps the "one year, one event" bookkeeping in a single function.
+   */
+  const unpair = (yi: number) => {
+    const holder = holderOf(yi);
+    if (holder >= 0) assign(holder, yi);
+  };
+
+  /** the chip in flight; `key` says WHICH copy of that year it is, so only that one dims */
+  const [drag, setDrag] = useState<{ yi: number; key: string } | null>(null);
+  /** the drop target under the pointer — an event index, or the un-pair pool */
+  const [over, setOver] = useState<number | 'pool' | null>(null);
+  /**
+   * The same year index, in a ref, because the FIRST dragover can reach a target before React
+   * has re-rendered with the state — and a dragover that skips preventDefault is a target that
+   * silently refuses the drop.
+   */
+  const dragged = useRef<number | null>(null);
+
+  const endDrag = () => {
+    dragged.current = null;
+    setDrag(null);
+    setOver(null);
+  };
+
+  const dragProps = (yi: number, key: string) => ({
+    draggable: !disabled,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox starts no drag at all unless something is written here, so this is required
+      // even though the ref below is what the drop actually reads first.
+      e.dataTransfer.setData('text/plain', String(yi));
+      dragged.current = yi;
+      setDrag({ yi, key });
+    },
+    // Fires after EVERY drag, including one released over nothing — which is exactly why the
+    // pairing is only ever written in onDrop: a drop outside a target must change nothing.
+    onDragEnd: endDrag,
+  });
+
+  /** The year a drop is carrying, re-checked against the CURRENT strip before it is used. */
+  const droppedYear = (e: DragEvent): number | null => {
+    const raw = e.dataTransfer.getData('text/plain');
+    const yi = raw === '' ? dragged.current ?? -1 : Number(raw);
+    // an index from a strip that no longer exists (the round changed mid-drag) would be exactly
+    // the out-of-range value isValidFactsAnswer rejects
+    return Number.isInteger(yi) && yi >= 0 && yi < years.length ? yi : null;
+  };
+
+  const dropProps = (target: number | 'pool') => ({
+    onDragOver: (e: DragEvent) => {
+      // preventDefault is what MAKES a drop legal, so it is spent only on our own chips: a file
+      // or a text selection dragged in from outside must go on being refused by the browser.
+      if (disabled || dragged.current === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (over !== target) setOver(target);
+    },
+    onDragLeave: (e: DragEvent) => {
+      // dragleave also fires when the pointer crosses from the row onto a chip INSIDE it, so the
+      // highlight is dropped only when the pointer really left the target — otherwise it blinks
+      // off and on again over every chip.
+      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+      setOver((t) => (t === target ? null : t));
+    },
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      const yi = droppedYear(e);
+      if (yi !== null) {
+        if (target === 'pool') unpair(yi);
+        // Dropping a year back on the row that already holds it is a no-op, not an un-pair.
+        // assign() treats a repeat as the toggle — right for a CLICK, wrong for a drag, where
+        // "put it back where I picked it up" must mean "cancel", never "remove it". The pool
+        // is the un-pair target, and dragging out to it still works.
+        else if (holderOf(yi) !== target) assign(target, yi);
+      }
+      endDrag();
+    },
+  });
+
   // `years` missing — an older server, or a value the wire guard refused — is not a crash: the
   // events still render so the tester sees what DID arrive, there is just nothing to pair with.
   const noYears = years.length === 0;
   const paired = events.reduce((n, _, i) => (yearOf(i) === -1 ? n : n + 1), 0);
+  /** years nobody holds — the pool's contents, and the only list that shrinks as pairs are made */
+  const free = years.map((_, yi) => yi).filter((yi) => holderOf(yi) === -1);
 
   return (
     <div className="chrono">
       <p className="hint">
         {noYears
           ? 'Сервер не надіслав масив years — пару скласти нема з чого.'
-          : 'Признач кожній події її рік. Один рік — тільки для однієї події: клік по зайнятому' +
-            ' року міняє події місцями, клік по власному — знімає пару.'}
+          : 'Перетягни рік на подію. Один рік — тільки для однієї події: кидок на зайняту подію' +
+            ' міняє їх місцями, а перетягування року назад у «вільні роки» знімає пару.'}
       </p>
+      {!noYears && (
+        <p className="hint small">
+          Клік по року в рядку робить те саме — саме він працює з клавіатури (Tab + Enter) і на
+          тачскріні, де перетягування ненадійне.
+        </p>
+      )}
+
+      {!noYears && (
+        <div className={`pair-pool${over === 'pool' ? ' over' : ''}`} {...dropProps('pool')}>
+          <span className="pair-pool-label">вільні роки</span>
+          {free.length === 0 ? (
+            <span className="pair-pool-empty">
+              усі роки розібрано — перетягни рік сюди, щоб зняти пару
+            </span>
+          ) : (
+            free.map((yi) => (
+              // A span, not a button: a click here has no row to aim at, so there is nothing for
+              // it to do. Nothing is lost — every year is also a real button in every row below,
+              // which is where the keyboard path lives.
+              <span
+                key={yi}
+                // `off`, not :disabled — a span never matches that pseudo-class, so once the
+                // round closes these chips would keep hovering and reading as live while
+                // dragProps has already stopped them being draggable.
+                className={`pair-year free${disabled ? ' off' : ''}${
+                  drag?.key === `pool:${yi}` ? ' dragging' : ''
+                }`}
+                title={disabled ? undefined : 'вільний рік — перетягни його на подію'}
+                {...dragProps(yi, `pool:${yi}`)}
+              >
+                {years[yi]}
+              </span>
+            ))
+          )}
+        </div>
+      )}
 
       {events.map((ev, i) => {
         const mine = yearOf(i);
         return (
-          <div className="pair-row" key={ev.id}>
+          <div className={`pair-row${over === i ? ' over' : ''}`} key={ev.id} {...dropProps(i)}>
             <div className="pair-event">
-              <span className={mine === -1 ? 'pair-slot' : 'pair-slot set'}>
+              {/* The row's own year is a chip too, so it can be dragged straight onto another row
+                  (a swap) or back into the pool (un-pair) without hunting for it in a strip. */}
+              <span
+                className={`pair-slot${mine === -1 ? '' : ' set'}${
+                  drag?.key === `slot:${i}` ? ' dragging' : ''
+                }`}
+                title={
+                  mine === -1
+                    ? undefined
+                    : 'перетягни на іншу подію або у «вільні роки», щоб зняти пару'
+                }
+                {...(mine === -1 || disabled ? {} : dragProps(mine, `slot:${i}`))}
+              >
                 {mine === -1 ? '—' : years[mine]}
               </span>
               <span className="pair-text">{ev.text}</span>
@@ -1802,7 +1956,9 @@ function ChronoPairing({
                   return (
                     <button
                       key={yi}
-                      className={`pair-year${isMine ? ' on' : holder >= 0 ? ' taken' : ''}`}
+                      className={`pair-year${isMine ? ' on' : holder >= 0 ? ' taken' : ''}${
+                        drag?.key === `${i}:${yi}` ? ' dragging' : ''
+                      }`}
                       // Only the round being closed kills a chip. A chip taken by another event
                       // stays clickable ON PURPOSE — that click IS the swap.
                       disabled={disabled}
@@ -1816,6 +1972,7 @@ function ChronoPairing({
                             : undefined
                       }
                       onClick={() => assign(i, yi)}
+                      {...dragProps(yi, `${i}:${yi}`)}
                     >
                       {year}
                     </button>
@@ -1828,7 +1985,7 @@ function ChronoPairing({
       })}
 
       {/* An EXPLICIT submit, unlike the sequence UI this replaced (which fired the moment every
-          event had been clicked). A pairing stays editable to the last second — one click can
+          event had been clicked). A pairing stays editable to the last second — one drop can
           swap two rows — so the first instant every slot happens to be full is not the instant
           the tester means to send, and the server takes one answer per round. Left enabled while
           the pairing is incomplete because -1 is a legal value and that path needs testing too. */}
