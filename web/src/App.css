@@ -439,6 +439,27 @@ main > * { min-width: 0; }
 .finish h2 { border-bottom-color: var(--ok-line); }
 .finish button { margin-top: var(--sp-3); }
 
+/* ─── 10. Фінал: таблиця нагород ─────────────────────────────────────────────
+   The endgame leaderboard reuses the booking roster's grid and artwork boxes
+   (.rosterbox / .roster / .flagbox / .charbox) on purpose: the pre-match list and
+   the final table show the same players and must keep one rhythm. Only what is
+   finish-specific lives here. */
+.finish .rosterbox { margin: var(--sp-4) 0 var(--sp-3); text-align: left; }
+/* the winner's row gets the me-row treatment in the ok tint; on the own winning row
+   this rule sits later in the file than .roster li.me, so the ok tint wins */
+.roster li.win { background: var(--ok-soft); }
+.roster li.win .nick { color: var(--ok); }
+/* a reconstructed rank must read as a guess, not as a server fact — see buildFinishRows */
+.roster .num.approx { font-style: italic; }
+/* the payout chips share the .clan chip's shape so the tail column keeps one height */
+.roster .reward {
+  font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 1px 7px; border-radius: var(--r-pill);
+}
+.roster .reward.gems { color: var(--accent); background: var(--accent-soft); }
+.roster .reward.tix { color: var(--warn); background: var(--warn-soft); }
+.finish .hint.small { font-size: 12px; }
+
 .countdown {
   font-size: 28px; font-weight: 700; color: var(--ok); margin: var(--sp-1) 0 var(--sp-2);
   font-variant-numeric: tabular-nums;

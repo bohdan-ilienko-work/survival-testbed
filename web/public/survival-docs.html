@@ -561,6 +561,24 @@ stateDiagram-v2
   reason: "initial" | "entry_fee" | "buyback" | "ad_reward" | "refresh" }</code></pre>
   <p><code>recordAdView([])</code> — нарахування за рекламу → <code>{ ticketsGranted, balance }</code>
   (ліміт 2 за матч). Довідково на main-server: <code>beG.getTickets()</code>.</p>
+
+  <h3>Нагороди за фінальне місце</h3>
+  <p>Таблиця нагород живе в документі денного сета (фабрика, поле <code>rewards</code>) і
+  <b>налаштовується редактором</b>: дефолт для нових сетів — на сторінці конфігурації фабрики,
+  конкретний день — на сторінці сета. Дефолт: 1-ше місце 100💎+10🎟, 2-ге 25💎+5🎟,
+  3-тє 10💎+2🎟, 4–8 — по 1🎟. Для дня без сета survival-server бере вшиту дефолтну таблицю.</p>
+  <pre class="block"><code>// у payload lobbyFinished (broadcast)
+rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Правило</th><th>Що це означає для клієнта</th></tr></thead>
+    <tbody>
+      <tr><td>Ранг — загальне фінальне місце</td><td>боти теж займають ранги, але <b>виплат не отримують</b>; у масиві лише живі гравці, нульові рядки пропущені</td></tr>
+      <tr><td>Рахує survival-server, платить main-server</td><td>масив у <code>lobbyFinished</code> — це і є фінальний лідерборд; малюй його як є, нічого не перераховуй</td></tr>
+      <tr><td>Виплата асинхронна</td><td><code>ticketsUpdated</code> із survival-server <b>не прийде</b> — виплата йде на main-server після бою; баланс онови через <code>beG.getTickets()</code> з невеликою затримкою</td></tr>
+      <tr><td>Старий сервер</td><td>без масиву <code>rewards</code> діє легасі-схема (50 золота учасникам, 20 гемів переможцю) — відсутність поля не помилка</td></tr>
+      <tr><td>Скасоване лоббі</td><td><code>lobbyCancelled</code> нагород не несе ніколи</td></tr>
+    </tbody>
+  </table></div>
 </section>
 
 <section>
@@ -580,7 +598,7 @@ stateDiagram-v2
       <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code> / <code>ticketsUpdated</code></td><td><span class="tag private">приватні</span></td><td>див. §7–8; завжди несуть <code>playerId</code> адресата — звіряй зі своїм</td></tr>
       <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — ціни нема (гаманець гравця)</td></tr>
       <tr><td><code>playerDisconnected</code> / <code>playerReconnected</code></td><td><span class="tag bcast">лоббі</span> / <span class="tag private">приватна</span></td><td>реконект несе стан для відновлення UI</td></tr>
-      <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId</code>; нагороди нараховує main-server (50 золота учасникам, 20 гемів переможцю)</td></tr>
+      <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId, totalRounds, rewards: [{playerId, rank, gems, tickets}]</code> — фінальний лідерборд із виплатами (§8); плюс 50 золота кожному учаснику від main-server</td></tr>
       <tr><td><code>lobbyCancelled</code> / <code>fightError</code></td><td><span class="tag bcast">лоббі</span></td><td>аварійні; <code>fightError.reason</code> — напр. <code>round_cap_reached</code></td></tr>
     </tbody>
   </table></div>

@@ -12,6 +12,7 @@ import {
   stepLabel,
   type BookingStatus,
   type LobbyPlayer,
+  type RewardRow,
   type SurvivalState,
 } from './survival';
 import { MapPicker } from './MapPicker';
@@ -552,6 +553,27 @@ export default function App() {
     quoteBuyBack,
   ]);
 
+  // After the final: survival-server only REPORTS the result (ProcessSurvivalResult) and
+  // main-server pays in its own time, so a balance read at the moment of 'lobbyFinished' is
+  // read BEFORE the payout lands. Ask again after a short pause — through the same
+  // beG.getTickets path the «Тікети» button uses — and quietly: an automatic refresh that
+  // misses is a log line, not an error to shout over the endgame screen.
+  useEffect(() => {
+    if (state.step !== 'finished') return;
+    const t = setTimeout(async () => {
+      try {
+        const res: any = await gw().call('main', 'beG', 'getTickets', []);
+        pushLog(`beG.getTickets (після виплати) → ${String(JSON.stringify(res)).slice(0, 120)}`);
+        setState((s) => applyTicketBalance(s, res?.tickets ?? res, { reason: 'payout' }));
+      } catch (err) {
+        pushLog(`beG.getTickets (після виплати) ✗ ${(err as Error).message}`);
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+    // deliberately only the step: re-arming on every state change would keep pushing the
+    // payout read further into the future while events keep arriving
+  }, [state.step]);
+
   // A stale binding is the usual cause of "Not authenticated" (page reloaded, gateway
   // restarted). Re-join once and retry instead of dead-ending the tester.
   const rejoinAndRetry = async (fn: () => Promise<unknown>) => {
@@ -916,14 +938,7 @@ export default function App() {
           )}
 
           {state.step === 'finished' && (
-            <div className="panel finish">
-              <h2>{state.winnerId === playerId ? '🏆 Перемога!' : 'Матч завершено'}</h2>
-              <p>переможець: <code>{state.winnerId ?? '—'}</code></p>
-              <p>раундів: {state.totalRounds ?? state.round}</p>
-              <button className="primary" onClick={startEverything} disabled={!!busy}>
-                Зіграти ще
-              </button>
-            </div>
+            <FinishView state={state} me={playerId} busy={!!busy} onRestart={startEverything} />
           )}
           {/* The booking screen used to sit here, permanently, under the match panels. It is a
               MAIN-MENU popup — it exists hours before there is a step or a survival socket — so
@@ -961,6 +976,14 @@ export default function App() {
                         ? 'так'
                         : 'ні'}
                     {state.buybackUnavailableReason ? ` · ${state.buybackUnavailableReason}` : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td>нагороди (фінал)</td>
+                  <td>
+                    {state.rewards === undefined
+                      ? 'не знаю — сервер не прислав'
+                      : `${state.rewards.length} рядків`}
                   </td>
                 </tr>
                 <tr><td>гравців</td><td>{alive} / {players.length}</td></tr>
@@ -1690,6 +1713,218 @@ function QuestionView({
 
       <p className="answered">відповіли: {state.answeredCount}</p>
     </div>
+  );
+}
+
+// ─── 10. Фінал: підсумкова таблиця з нагородами ───────────────────────────────
+
+/** One line of the endgame table: a roster row joined with its payout, if it got one. */
+interface FinishRow {
+  playerId: string;
+  /** the OVERALL final rank (bots consume ranks too) */
+  rank?: number;
+  /** true = the rank was reconstructed client-side, not stated by the server */
+  approx: boolean;
+  name?: string;
+  flag?: string;
+  character?: number;
+  isBot?: boolean;
+  eliminated?: boolean;
+  eliminatedAtRound?: number | null;
+  gems: number;
+  tickets: number;
+}
+
+/**
+ * Join the final roster with the payout rows into one ranked table.
+ *
+ * The wire states ranks only for PAID humans — bots consume ranks but are omitted, and so are
+ * all-zero rows — so most bots (and humans below the paid ranks) arrive rankless. Rather than
+ * dropping them, the unclaimed ranks are handed out from what the client watched happen: the
+ * winner first, then survivors, then the later-eliminated over the earlier. Every such rank is
+ * MARKED as reconstructed — a testbed must never pass a client guess off as a server fact.
+ */
+function buildFinishRows(
+  players: LobbyPlayer[],
+  rewards: RewardRow[] | undefined,
+  winnerId?: string | null,
+): FinishRow[] {
+  // first payout row per player wins; a duplicate playerId in `rewards` is a server bug the
+  // raw event log already shows, and doubling money on screen would compound it
+  const paid = new Map<string, RewardRow>();
+  for (const r of rewards ?? []) if (!paid.has(r.playerId)) paid.set(r.playerId, r);
+
+  const rows: FinishRow[] = players.map((p) => {
+    const r = paid.get(p.playerId);
+    return {
+      playerId: p.playerId,
+      rank: r?.rank,
+      approx: false,
+      name: p.name,
+      flag: p.flag,
+      character: p.character,
+      isBot: p.isBot,
+      eliminated: p.eliminated,
+      eliminatedAtRound: p.eliminatedAtRound,
+      gems: r?.gems ?? 0,
+      tickets: r?.tickets ?? 0,
+    };
+  });
+
+  // a payout addressed to somebody the roster forgot still has to be visible — it is money
+  const known = new Set(rows.map((row) => row.playerId));
+  for (const r of paid.values()) {
+    if (known.has(r.playerId)) continue;
+    known.add(r.playerId);
+    rows.push({
+      playerId: r.playerId,
+      rank: r.rank,
+      approx: false,
+      gems: r.gems ?? 0,
+      tickets: r.tickets ?? 0,
+    });
+  }
+
+  // the ranks the server did not claim, in order — these go to the rankless rows below
+  const taken = new Set<number>();
+  for (const row of rows) if (row.rank !== undefined) taken.add(row.rank);
+  const free: number[] = [];
+  for (let n = 1; n <= rows.length; n++) if (!taken.has(n)) free.push(n);
+
+  // roster order is the final tiebreak, so two bots eliminated in one round stay stable
+  const order = new Map(rows.map((row, i) => [row, i] as [FinishRow, number]));
+  const outcome = (row: FinishRow): number => {
+    if (winnerId && row.playerId === winnerId) return Number.MAX_SAFE_INTEGER;
+    if (!row.eliminated) return Number.MAX_SAFE_INTEGER - 1; // survived to the final round
+    // later elimination = better place; an unknown round sorts below every known one
+    return typeof row.eliminatedAtRound === 'number' ? row.eliminatedAtRound : -1;
+  };
+  const unranked = rows
+    .filter((row) => row.rank === undefined)
+    .sort((a, b) => outcome(b) - outcome(a) || order.get(a)! - order.get(b)!);
+  unranked.forEach((row, i) => {
+    // more rankless players than free ranks (duplicate server ranks): '—' beats a wrong number
+    if (free[i] === undefined) return;
+    row.rank = free[i];
+    row.approx = true;
+  });
+
+  return rows.sort(
+    (a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || order.get(a)! - order.get(b)!,
+  );
+}
+
+/**
+ * 10. Фінал — the endgame leaderboard the game mockup draws: rank, flag + portrait + nickname,
+ * then the payout. It reuses the booking roster's grid and artwork (.rosterbox / FlagImg /
+ * CharacterImg) so the pre-match list and the final table keep one look.
+ */
+function FinishView({
+  state,
+  me,
+  busy,
+  onRestart,
+}: {
+  state: SurvivalState;
+  me?: string;
+  busy: boolean;
+  onRestart: () => void;
+}) {
+  const players = Array.isArray(state.players) ? state.players : [];
+  const rows = buildFinishRows(players, state.rewards, state.winnerId);
+  const anyApprox = rows.some((r) => r.approx);
+
+  return (
+    <div className="panel finish">
+      <h2>{me && state.winnerId === me ? '🏆 Перемога!' : 'Матч завершено'}</h2>
+      <p>
+        переможець: <code>{state.winnerId ?? '—'}</code> · раундів:{' '}
+        {state.totalRounds ?? state.round}
+      </p>
+
+      {state.rewards === undefined ? (
+        // an old survival-server sends no rewards at all — that is "не знаю", not "нуль"
+        <p className="hint">
+          Нагороди: не знаю — сервер не прислав <code>rewards</code> (старий survival-server?).
+        </p>
+      ) : (
+        state.rewards.length === 0 && (
+          <p className="hint">
+            Сервер відповів порожнім <code>rewards</code> — виплат у цьому матчі немає.
+          </p>
+        )
+      )}
+
+      {rows.length > 0 && (
+        <div className="rosterbox">
+          <div className="rhead">
+            <span className="num">#</span>
+            <span>прап.</span>
+            <span>перс.</span>
+            <span>гравець</span>
+            <span className="tail">нагорода</span>
+          </div>
+          <ol className="roster">
+            {rows.map((row, index) => (
+              <FinishRowView
+                // index keeps the key unique even if the server ever repeats a playerId
+                key={`${index}:${row.playerId}`}
+                row={row}
+                mine={!!me && row.playerId === me}
+                win={!!state.winnerId && row.playerId === state.winnerId}
+              />
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <p className="hint small">
+        Боти займають місця в рейтингу, але нагород не отримують — сервер платить лише людям.
+        {anyApprox &&
+          ' Ранги курсивом відновлено з порядку вибування: сервер шле ранг лише тим, кому платить.'}
+      </p>
+      {/* the payout is asynchronous — the delayed beG.getTickets effect in App() re-reads it */}
+      <p className="hint small">Баланс 🎟 оновлюється після виплати на main-server.</p>
+
+      <button className="primary" onClick={onRestart} disabled={busy}>
+        Зіграти ще
+      </button>
+    </div>
+  );
+}
+
+/** One endgame row. Zero reward parts are omitted; a row with neither is an unpaid rank. */
+function FinishRowView({ row, mine, win }: { row: FinishRow; mine: boolean; win: boolean }) {
+  // bots are never paid — a bot row carrying money is a server bug, and the raw event log on
+  // the right is where that evidence belongs, not a leaderboard cell that legitimises it
+  const gems = !row.isBot && row.gems > 0 ? row.gems : 0;
+  const tickets = !row.isBot && row.tickets > 0 ? row.tickets : 0;
+  return (
+    <li className={`${mine ? 'me' : ''} ${win ? 'win' : ''}`}>
+      <span
+        className={`num ${row.approx ? 'approx' : ''}`}
+        title={
+          row.approx
+            ? 'ранг відновлено клієнтом з порядку вибування'
+            : row.rank === undefined
+              ? 'ранг невідомий'
+              : 'фінальний ранг від сервера'
+        }
+      >
+        {row.rank ?? '—'}
+      </span>
+      <FlagImg flag={row.flag} />
+      <CharacterImg id={row.character} />
+      <span className="nick" title={row.playerId}>
+        {row.name || row.playerId.slice(0, 12)}
+      </span>
+      <span className="tail">
+        {row.isBot && <span className="bot">бот</span>}
+        {mine && <span className="mine">я</span>}
+        {gems > 0 && <span className="reward gems">💎 {gems}</span>}
+        {tickets > 0 && <span className="reward tix">🎟 {tickets}</span>}
+      </span>
+    </li>
   );
 }
 

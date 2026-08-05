@@ -97,6 +97,42 @@ export interface Score {
   answer?: unknown;
 }
 
+/**
+ * One endgame payout row, as survival-server computes it: the OVERALL final rank (bots consume
+ * ranks too) and what main-server is told to pay for it. The contract sends humans only and
+ * omits all-zero rows, but nothing here relies on that — a bot row or a zero row is rendered
+ * fine, because the testbed's job is to show what actually arrived.
+ */
+export interface RewardRow {
+  playerId: string;
+  rank?: number;
+  gems?: number;
+  tickets?: number;
+}
+
+/**
+ * Read a `rewards` array off the wire, guarded like everything else: a missing or non-array
+ * value answers `undefined` ("сервер не сказав" — an OLD survival-server sends no rewards at
+ * all), never a crash. Rows are kept per-field: a row with a bad rank still shows its payout.
+ */
+const asRewards = (value: unknown): RewardRow[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const rows: RewardRow[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    // no playerId → nobody to attribute the payout to, so the row is unrenderable
+    if (typeof r.playerId !== 'string' || r.playerId === '') continue;
+    rows.push({
+      playerId: r.playerId,
+      rank: asNum(r.rank),
+      gems: asNum(r.gems),
+      tickets: asNum(r.tickets),
+    });
+  }
+  return rows;
+};
+
 export interface SurvivalState {
   step: Step;
   lobbyId?: string;
@@ -141,6 +177,12 @@ export interface SurvivalState {
 
   winnerId?: string | null;
   totalRounds?: number;
+  /**
+   * The endgame payouts, `undefined` until the server states them. Filled from EITHER shape the
+   * backend may ship — a `rewards` field inside 'lobbyFinished' or a separate 'lobbyRewards'
+   * event — and their order is not guaranteed, so neither write may blank the other's data.
+   */
+  rewards?: RewardRow[];
   lastError?: string;
 }
 
@@ -490,6 +532,9 @@ export function reduce(state: SurvivalState, ev: ServerEvent, myPlayerId?: strin
         lobbyState: 'ACTIVE',
         onboardingEndsAt: undefined,
         players: asPlayers(p.roster ?? p.players, state.players),
+        // a new fight starts with no payouts: without this, a finish payload that arrives
+        // without rewards would let the PREVIOUS match's table resurface under the new final
+        rewards: undefined,
       };
 
     case 'roundStarted':
@@ -642,7 +687,18 @@ export function reduce(state: SurvivalState, ev: ServerEvent, myPlayerId?: strin
         step: 'finished',
         winnerId: p.winnerId ?? null,
         totalRounds: p.totalRounds ?? state.round,
+        // the payouts may ride inside this payload or arrive as their own 'lobbyRewards'
+        // event, in either order — so a finish without them must keep what already came
+        rewards: asRewards(p.rewards) ?? state.rewards,
       };
+
+    // The stand-alone shape of the payout report — see the note on state.rewards. It may land
+    // before OR after the finish event, so it only stores data and never touches `step`.
+    case 'lobbyRewards': {
+      // a testbed tab lives across matches; a stale report for another lobby is not this one's
+      if (p.lobbyId && state.lobbyId && p.lobbyId !== state.lobbyId) return state;
+      return { ...state, rewards: asRewards(p.rewards) ?? state.rewards };
+    }
 
     case 'lobbyCancelled':
       return { ...state, step: 'idle', lastError: 'Lobby cancelled' };
