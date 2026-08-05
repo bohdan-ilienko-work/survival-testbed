@@ -1,0 +1,56 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   App shell — the pieces App.tsx needs that are neither the theme (App.css) nor the
+   dialog kit (ui.css).
+
+   It is a separate file because App.css is not this agent's to widen and ui.css is the
+   generic in-dialog kit; everything here is about the page AROUND the dialogs. Like
+   ui.css it declares no custom properties — the tokens come from App.css, which must be
+   loaded for any of this to resolve.
+
+   Every rule below is written to win on SPECIFICITY rather than on import order, so it
+   does not matter which of the three stylesheets Vite happens to emit first.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── toolbar groups ─────────────────────────────────────────────────────────────
+   Styled in App.css, NOT here. This file briefly carried a second copy of the block under
+   different class names (.tb-group/.cap/.btns) because the markup and the stylesheet were
+   written in parallel; the duplicate won on import order and quietly killed App.css's
+   version, including its ≤720px one-group-per-line rule. One component, one owner:
+   .tgroup / .tgroup-label / .tgroup-buttons live in App.css. */
+
+/* ─── the player's own look, in the header ───────────────────────────────────────
+   The character and flag beG.getContext reports right now. It sits next to the player id
+   because that is the one place on screen that is about THIS player rather than about the
+   match, and because it is the proof that the editor changed anything at all — the roster
+   below cannot show it (its rows are stamped at registration). */
+.who .look { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ─── panels re-used inside a dialog ─────────────────────────────────────────────
+   .booking's own top margin is for the stage, where it used to sit under the match
+   panels; inside a modal body the dialog already provides the padding, and the margin
+   only pushes the first line away from the title. */
+.booking.in-modal { margin-top: 0; }
+
+/* A server refusal shown in a dialog's footer strip. ui.css's .ui-note is a block, so as a
+   flex item it would otherwise take its full natural width and shove the buttons off the
+   row — this gives it a basis it may shrink from, and lets an id-like message with no spaces
+   in it break instead of widening the dialog. */
+.modal-foot .ui-note {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ─── raw server replies ─────────────────────────────────────────────────────────
+   A testbed's whole point is the untouched answer, so every dialog that asks the server
+   something shows it verbatim — capped in height so a 200-line reply does not bury the
+   buttons under it, and scrolling on its own rather than stretching the dialog. */
+.raw-json {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 240px;
+  overflow: auto;
+  background: #101728;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}

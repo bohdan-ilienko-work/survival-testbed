@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Gateway, type ServerEvent, type Target, type TargetState } from './gateway';
 import {
   applyBuyBackQuote,
@@ -14,6 +15,8 @@ import {
   type SurvivalState,
 } from './survival';
 import { MapPicker } from './MapPicker';
+import { Modal } from './ui/Modal';
+import { CharacterEditor } from './ui/CharacterEditor';
 import {
   characterFullUrl,
   characterIconUrl,
@@ -22,8 +25,43 @@ import {
   unknownFlagUrl,
 } from './gameAssets';
 import './App.css';
+import './ui/shell.css';
 
 const TARGETS: Target[] = ['main', 'survival'];
+
+/**
+ * Which dialog is up, at most one at a time.
+ *
+ * They are all different ways of looking at the SAME player, so stacking two would only ever
+ * hide the thing underneath — and the match itself is never one of them: everything that IS the
+ * fight (question, results, buyback, the lobby countdown) stays on the stage, because a dialog
+ * over a running round is a dialog over a ticking deadline.
+ */
+type Dialog = 'booking' | 'lobby' | 'quote' | 'character';
+
+/**
+ * What the player looks like right now, straight off beG.getContext's `userContext`
+ * (main-server lib/contexts.js, formPublishablePlayerContext).
+ *
+ * Nothing else the client holds carries this: the gateway session is only
+ * {accountId, deviceId, playerId, tabId}, and every roster row — the booking list AND the live
+ * lobby — is the copy main-server stamped in at RegisterPlayer time, which is never refreshed
+ * afterwards. So right after the editor changes a character, the rosters still show the old one
+ * and this is the only field that tells the truth.
+ */
+interface Profile {
+  character?: number;
+  flag?: string;
+  name?: string;
+  /**
+   * Reborn players pick TWO categories, not three (lib/characters.js). Worth carrying even
+   * though a fresh mock account is never reborn: the server answers the wrong-count case
+   * through `api.beGenius.error` — singular, a typo for `errors` — so it throws instead of
+   * calling back, and the client just hangs until the gateway's 15s timeout. A silent
+   * timeout is the worst failure to hand a tester, so the count is driven by this flag.
+   */
+  reborn?: boolean;
+}
 
 /**
  * Free country codes for «Змінити прапор». Every one of them is in main-server's
@@ -81,12 +119,60 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [survivalLost, setSurvivalLost] = useState(false);
 
+  // ─── dialogs ───────────────────────────────────────────────────────────────
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  /**
+   * The last failure raised by a dialog's OWN buttons. It needs somewhere separate to land:
+   * run() writes failures into the stage's error box, and the stage is behind the backdrop
+   * while a dialog is up — so without this a button inside a modal looks like it did nothing.
+   */
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  // Read by quoteBuyBack, which is also fired by an effect during a match: a price it failed to
+  // fetch on its own must not be reported inside whatever OTHER dialog happens to be open.
+  const dialogRef = useRef<Dialog | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  // The raw replies the two read-only dialogs exist to show. Kept out of SurvivalState for the
+  // same reason `booking` is: they are snapshots of one call, not the live match.
+  const [lobbyInfo, setLobbyInfo] = useState<{ at: number; reply: unknown } | null>(null);
+  const [quoteInfo, setQuoteInfo] = useState<{ at: number; reply: unknown } | null>(null);
+
+  dialogRef.current = dialog;
+
   const playerId: string | undefined = session?.playerId;
   const playerIdRef = useRef<string | undefined>(undefined);
   playerIdRef.current = playerId;
 
   const pushLog = (line: string) =>
     setLogs((l) => [`${new Date().toLocaleTimeString()} · ${line}`, ...l].slice(0, 200));
+
+  const gw = () => gwRef.current!;
+
+  /**
+   * Re-read the player's live character / flag / name.
+   *
+   * beG.getContext is the very call the real client's main menu makes, and `userContext` is
+   * where main-server publishes those fields — see the Profile type above for why no cheaper
+   * source exists.
+   *
+   * Not wrapped in run() on purpose, exactly like fetchBooking: callers refresh from INSIDE
+   * their own run(), and a nested run()'s finally would clear `busy` while the outer call is
+   * still in flight.
+   */
+  const fetchProfile = useCallback(async () => {
+    const res: any = await gw().call('main', 'beG', 'getContext', []);
+    const u = res?.userContext;
+    if (!u || typeof u !== 'object') return undefined;
+    // Read guarded, like survival.ts reads the wire: a renamed or missing field has to degrade
+    // into "не знаю" instead of putting an undefined-driven picture on screen.
+    setProfile({
+      character: typeof u.character === 'number' ? u.character : undefined,
+      flag: typeof u.flag === 'string' ? u.flag : undefined,
+      name: typeof u.name === 'string' ? u.name : undefined,
+      // published right beside character/flag (lib/contexts.js) — see Profile.reborn
+      reborn: typeof u.reborn === 'boolean' ? u.reborn : undefined,
+    });
+    return u;
+  }, []);
 
   useEffect(() => {
     const gw = new Gateway();
@@ -103,6 +189,9 @@ export default function App() {
         if (s?.accountId && s?.deviceId) saveAccount({ accountId: s.accountId, deviceId: s.deviceId });
         setSession(s);
         pushLog(`автовхід: гравець ${s?.playerId}`);
+        // The header portrait and the editor's «зараз» both read this. A miss is not a failed
+        // sign-in, so it must not fall into the catch below and claim the login broke.
+        await fetchProfile().catch((e) => pushLog(`beG.getContext ✗ ${(e as Error).message}`));
       } catch (e) {
         pushLog(`автовхід не вдався: ${(e as Error).message}`);
       }
@@ -123,7 +212,10 @@ export default function App() {
     };
     gw.connect();
     return () => gw.close();
-  }, []);
+    // fetchProfile is a useCallback with no dependencies, so its identity never changes and
+    // listing it cannot re-run this effect — which it must not, since re-running would tear the
+    // gateway socket down and re-create it under a live match.
+  }, [fetchProfile]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -147,7 +239,27 @@ export default function App() {
     }
   }, []);
 
-  const gw = () => gwRef.current!;
+  /**
+   * run(), plus the failure lands INSIDE the open dialog.
+   *
+   * Used by every button that lives in a modal. It swallows the rejection the same way the
+   * toolbar's `.catch(() => undefined)` does — the message is already on screen, in the log and
+   * in the stage's error box, so re-throwing it would only add an unhandled rejection.
+   */
+  const runInDialog = (label: string, fn: () => Promise<unknown>) => {
+    setDialogError(null);
+    return run(label, fn).catch((err) => {
+      setDialogError((err as Error).message);
+      return undefined;
+    });
+  };
+
+  // A dialog always opens on a clean slate: the previous dialog's refusal is not this one's.
+  const openDialog = (which: Dialog) => {
+    setDialogError(null);
+    setDialog(which);
+  };
+  const closeDialog = () => setDialog(null);
 
   const connectAll = () =>
     run('connect all servers', async () => {
@@ -173,6 +285,13 @@ export default function App() {
       // The booking snapshot belongs to the PREVIOUS account — above all its «зареєстрований»
       // pill, which would otherwise claim a brand-new player has already paid for a seat.
       setBooking(null);
+      setLobbyInfo(null);
+      setQuoteInfo(null);
+      // Same for the look: every mock account is signed up with its own character (the gateway
+      // rotates them), so keeping the old one would draw the previous player's portrait in the
+      // header and preselect it in the editor.
+      setProfile(null);
+      await fetchProfile().catch(() => undefined);
       return { tab: s?.tabId, playerId: s?.playerId };
     }).catch(() => undefined);
 
@@ -220,7 +339,8 @@ export default function App() {
     return res;
   }, []);
 
-  const bookingStatus = () => run('beG.getSurvivalStatus', fetchBooking).catch(() => undefined);
+  // Lives in the booking dialog now (its refresh button), so its failure has to show up there.
+  const bookingStatus = () => runInDialog('beG.getSurvivalStatus', fetchBooking);
 
   /**
    * Testbed convenience, not a product feature: fresh mock accounts are clanless, so without
@@ -230,11 +350,11 @@ export default function App() {
    * NEXT lobby — hence the hint next to the button.
    */
   const mockClan = () =>
-    run('mockClan (тестовий клан)', async () => {
+    runInDialog('mockClan (тестовий клан)', async () => {
       const clan = await gw().mockClan();
       await fetchBooking();
       return clan;
-    }).catch(() => undefined);
+    });
 
   /**
    * Testbed convenience, the twin of «Створити клан»: every mock player signs up from
@@ -249,11 +369,15 @@ export default function App() {
    * the next code instead of shouting at the tester.
    */
   const changeFlag = () =>
-    run('beG.changeFlag (тестовий прапор)', async () => {
+    runInDialog('beG.changeFlag (тестовий прапор)', async () => {
       let denied: Error | undefined;
       for (const code of flagsToTry()) {
         try {
           const res = await gw().call('main', 'beG', 'changeFlag', [code]);
+          // The header's flag reads the live profile, so it is the one place the change shows
+          // up immediately; the roster right under this button cannot, for the reason on the
+          // next line.
+          setProfile((p) => ({ ...(p ?? {}), flag: code }));
           // The flag is copied into the roster by RegisterPlayer, exactly like the clan, so this
           // refresh only redraws the OTHER fields — the new flag shows up in the NEXT lobby.
           await fetchBooking();
@@ -264,7 +388,7 @@ export default function App() {
         }
       }
       throw denied ?? new Error('не вдалося змінити прапор');
-    }).catch(() => undefined);
+    });
 
   // "Insufficient tickets" is the usual first-run trap: top up once and retry
   // instead of making the tester guess the button order.
@@ -397,11 +521,17 @@ export default function App() {
       const res: any = await gw().call('survival', 'survival', 'getBuyBackQuote', []);
       pushLog(`survival.getBuyBackQuote → ${String(JSON.stringify(res)).slice(0, 200)}`);
       setState((s) => applyBuyBackQuote(s, res));
+      setQuoteInfo({ at: Date.now(), reply: res });
       return res;
     } catch (err) {
       const msg = (err as Error).message;
       pushLog(`survival.getBuyBackQuote ✗ ${msg}`);
       if (!/no method/i.test(msg)) setState((s) => ({ ...s, lastError: errorText(msg) }));
+      // Shown in the price dialog too, and even for "no method": that answer is exactly the
+      // finding the dialog exists to surface, though it is not one the stage should shout
+      // about. Only when THAT dialog is the open one — this also runs from the effect below,
+      // which fires on its own during a match.
+      if (dialogRef.current === 'quote') setDialogError(msg);
       return undefined;
     }
   }, []);
@@ -445,7 +575,7 @@ export default function App() {
     );
 
   const lobbyStatus = () =>
-    run('survival.getLobbyStatus', async () => {
+    runInDialog('survival.getLobbyStatus', async () => {
       const res: any = await gw().call('survival', 'survival', 'getLobbyStatus', []);
       setState((s) => ({
         ...s,
@@ -453,8 +583,113 @@ export default function App() {
         lobbyId: res?.lobbyId ?? s.lobbyId,
         players: Array.isArray(res?.roster) ? res.roster : s.players,
       }));
+      // Kept raw as well: the dialog exists to show what the server actually answered, not only
+      // the four fields the reducer keeps.
+      setLobbyInfo({ at: Date.now(), reply: res });
       return res;
-    }).catch(() => undefined);
+    });
+
+  // ─── character & flag editor (beG.resetChar / beG.changeFlag / adminApi.grantToPlayer) ───
+  // All three go through run() so a refusal reaches the editor as a rejection carrying the
+  // server's own words — the editor prints error.message verbatim and adds a hint of its own
+  // only for the refusals it recognises.
+
+  /**
+   * beG.resetChar. ONE positional argument, the {character, categories} object
+   * (main-server api/beG/resetChar.js), and `categories` is ordered [strong, strong, weak] —
+   * resetChar reads categories.slice(0,2) as the strong pair and [2] as the weak one, so it must
+   * not be sorted or de-duplicated on the way out.
+   */
+  const applyCharacter = async ({
+    character,
+    categories,
+  }: {
+    character: number;
+    categories: string[];
+  }) => {
+    await run('beG.resetChar', async () => {
+      const res: any = await gw().call('main', 'beG', 'resetChar', [{ character, categories }]);
+      // The reply carries the character the server actually stored, so adopt THAT rather than
+      // what we asked for — and do it before the refresh below, so «зараз» moves even if the
+      // refresh is refused.
+      setProfile((p) => ({
+        ...(p ?? {}),
+        character: typeof res?.character === 'number' ? res.character : character,
+      }));
+      // The booking roster has a character column, so it is worth redrawing — but its rows are
+      // stamped at RegisterPlayer time, so what actually changes there is the NEXT lobby's rows.
+      // A failure here is not a refused reset, so it must never reject this promise: the editor
+      // would print the refresh's message as if the character change had been denied.
+      await fetchBooking().catch(() => undefined);
+      return res;
+    });
+  };
+
+  /** beG.changeFlag — one positional argument, the code or premium flag NAME. */
+  const applyFlag = async (flag: string) => {
+    await run(`beG.changeFlag ${flag}`, async () => {
+      const res: any = await gw().call('main', 'beG', 'changeFlag', [flag]);
+      setProfile((p) => ({ ...(p ?? {}), flag: typeof res?.flag === 'string' ? res.flag : flag }));
+      await fetchBooking().catch(() => undefined);
+      return res;
+    });
+  };
+
+  /**
+   * adminApi.grantToPlayer — the testbed shortcut that makes a premium character or flag
+   * selectable at all. The editor never sends a playerId (it has no business knowing one), so it
+   * is added here, together with the audit `reason` main-server writes into moneyFlow.
+   */
+  const grantToPlayer = async (payload: {
+    characters?: number[];
+    flags?: string[];
+    experience?: number;
+    gems?: number;
+  }) => {
+    await run('adminApi.grantToPlayer', async () => {
+      const res = await gw().call('main', 'adminApi', 'grantToPlayer', [
+        { playerId, ...payload, reason: 'testbed' },
+      ]);
+      // A grant moves ownership and the wallet, neither of which is drawn on this screen — but
+      // main-server itself treats the client as stale afterwards (it pushes `runMain` to force a
+      // context refetch), so take it at its word rather than guess that nothing changed.
+      await fetchProfile().catch(() => undefined);
+      return res;
+    });
+  };
+
+  // ─── openers ───────────────────────────────────────────────────────────────
+  // Each of the three read-only dialogs asks its own question on the way up, so opening one is
+  // one click rather than "open, then press refresh".
+
+  const openBooking = () => {
+    openDialog('booking');
+    void bookingStatus();
+  };
+
+  const openLobbyStatus = () => {
+    openDialog('lobby');
+    void lobbyStatus();
+  };
+
+  const openQuote = () => {
+    openDialog('quote');
+    void quoteBuyBack();
+  };
+
+  const openCharacterEditor = () => {
+    openDialog('character');
+    // Refresh what the editor calls «зараз»: without it the editor falls back to the roster's
+    // registration-time copy, which is exactly the value a previous edit already invalidated.
+    // A miss only means that fallback stays — the reason is in the log.
+    void run('beG.getContext', fetchProfile).catch(() => undefined);
+  };
+
+  /** The price dialog's own refresh: quoteBuyBack never rejects, it reports through dialogError. */
+  const refreshQuote = () => {
+    setDialogError(null);
+    void quoteBuyBack();
+  };
 
   const secondsLeft = useMemo(() => {
     if (!state.deadline) return null;
@@ -463,6 +698,38 @@ export default function App() {
 
   const players = Array.isArray(state.players) ? state.players : [];
   const alive = players.filter((p) => !p.eliminated).length;
+
+  /**
+   * My own row, wherever the server last mentioned me: the booking list first (it is the
+   * pre-match screen and exists hours earlier), the live lobby roster second.
+   *
+   * It is only ever a FALLBACK for the editor — see Profile — because both rosters carry the
+   * character and flag copied in at registration, not the current ones.
+   */
+  const myRosterRow = useMemo(() => {
+    if (!playerId) return undefined;
+    const booked = booking?.lobby?.roster?.find((r) => r?.playerId === playerId);
+    if (booked) return booked;
+    // state.players and not the `players` above: that one re-creates its [] fallback on every
+    // render, which would make this memo re-run every render and defeat the point of it.
+    const live = Array.isArray(state.players) ? state.players : [];
+    return live.find((p) => p?.playerId === playerId);
+  }, [booking, state.players, playerId]);
+
+  /** What the editor opens on: the live profile where we have it, the roster copy otherwise. */
+  const myLook = useMemo(
+    () => ({
+      playerId,
+      character:
+        profile?.character ??
+        (typeof myRosterRow?.character === 'number' ? myRosterRow.character : undefined),
+      flag: profile?.flag ?? (typeof myRosterRow?.flag === 'string' ? myRosterRow.flag : undefined),
+      name: profile?.name ?? (typeof myRosterRow?.name === 'string' ? myRosterRow.name : undefined),
+      // only beG.getContext knows this — the roster row carries no such field
+      reborn: profile?.reborn,
+    }),
+    [profile, myRosterRow, playerId],
+  );
 
   // The chip itself only shows a number; the tooltip says where that number came from,
   // which is the difference between "live" and "stale" while testing.
@@ -497,6 +764,15 @@ export default function App() {
             <>
               <b>вкладка #{session.tabId ?? '?'}</b>
               <code>{String(session.playerId).slice(0, 14)}</code>
+              {/* The live look (beG.getContext), and the only place on screen that can show it:
+                  every roster row still carries the picture stamped in at registration, so this
+                  is the one thing that moves the moment the editor changes a character. */}
+              {profile && (profile.character !== undefined || !!profile.flag) && (
+                <span className="look" title="персонаж і прапор гравця зараз (beG.getContext)">
+                  {profile.character !== undefined && <CharacterImg id={profile.character} />}
+                  {!!profile.flag && <FlagImg flag={profile.flag} />}
+                </span>
+              )}
             </>
           ) : (
             <i>не залогінений</i>
@@ -509,29 +785,53 @@ export default function App() {
         </div>
       </header>
 
+      {/* Four intents instead of one undifferentiated row. Every `disabled` below is unchanged
+          from the flat row it replaces: each one encodes a real precondition (note that «Хто
+          зареєстрований» is deliberately NOT gated on the survival socket), so the grouping is a
+          layout change and not a permission change. */}
       <section className="toolbar">
-        <button onClick={startEverything} disabled={!!busy || !gwOnline} className="primary big">
-          ▶ Почати тест
-        </button>
-        <button onClick={connectAll} disabled={!!busy}>Підключити сервери</button>
-        <button onClick={() => mockUser(false)} disabled={!!busy || !gwOnline}>Мок-юзер</button>
-        <button onClick={() => mockUser(true)} disabled={!!busy || !gwOnline}>Новий гравець</button>
-        <button onClick={refreshTickets} disabled={!!busy || !session?.playerId}>Тікети</button>
-        <button onClick={grantTickets} disabled={!!busy || !session?.playerId}>+50 🎟</button>
-        {/* main-server only: this is the pre-match booking screen, so it must stay usable
-            while survival is not connected — do not add a survival gate here */}
-        <button onClick={bookingStatus} disabled={!!busy || !session?.playerId}>
-          Хто зареєстрований
-        </button>
-        <button onClick={joinSurvival} disabled={!!busy || !session?.playerId} className="primary">
-          Зайти в Survival
-        </button>
-        <button onClick={lobbyStatus} disabled={!!busy}>Статус лобі</button>
-        <button onClick={leaveSurvival} disabled={!!busy || state.step === 'idle'}>Вийти</button>
-        <button onClick={recordAdView} disabled={!!busy || state.step === 'idle'}>Реклама +🎟</button>
-        <button onClick={() => quoteBuyBack()} disabled={!!busy || state.step === 'idle'}>
-          Ціна викупу
-        </button>
+        <ToolGroup label="Стенд">
+          <button onClick={startEverything} disabled={!!busy || !gwOnline} className="primary big">
+            ▶ Почати тест
+          </button>
+          <button onClick={connectAll} disabled={!!busy}>Підключити сервери</button>
+        </ToolGroup>
+
+        <ToolGroup label="Гравець">
+          <button onClick={() => mockUser(false)} disabled={!!busy || !gwOnline}>Мок-юзер</button>
+          <button onClick={() => mockUser(true)} disabled={!!busy || !gwOnline}>Новий гравець</button>
+          {/* Gated on the player, not on the gateway: every call the editor makes goes to
+              main-server's beG/adminApi, and beG's guard (`if (connection.player)`) simply never
+              calls back for a tab that has not signed in — a 20 s timeout instead of an error. */}
+          <button onClick={openCharacterEditor} disabled={!!busy || !session?.playerId}>
+            Персонаж
+          </button>
+          <button onClick={grantTickets} disabled={!!busy || !session?.playerId}>+50 🎟</button>
+          <button onClick={refreshTickets} disabled={!!busy || !session?.playerId}>Тікети</button>
+        </ToolGroup>
+
+        <ToolGroup label="Survival">
+          {/* main-server only: this is the pre-match booking screen, so it must stay usable
+              while survival is not connected — do not add a survival gate here */}
+          <button onClick={openBooking} disabled={!!busy || !session?.playerId}>
+            Хто зареєстрований
+          </button>
+          <button onClick={joinSurvival} disabled={!!busy || !session?.playerId} className="primary">
+            Зайти в Survival
+          </button>
+          <button onClick={openLobbyStatus} disabled={!!busy}>Статус лобі</button>
+          <button onClick={leaveSurvival} disabled={!!busy || state.step === 'idle'}>Вийти</button>
+        </ToolGroup>
+
+        <ToolGroup label="У бою">
+          <button onClick={recordAdView} disabled={!!busy || state.step === 'idle'}>
+            Реклама +🎟
+          </button>
+          <button onClick={openQuote} disabled={!!busy || state.step === 'idle'}>
+            Ціна викупу
+          </button>
+        </ToolGroup>
+
         {busy && <span className="busy">{busy}…</span>}
       </section>
 
@@ -625,17 +925,10 @@ export default function App() {
               </button>
             </div>
           )}
-          {/* Below the match panels, and never gated on a step or on the survival socket:
-              the booking popup belongs to the main menu, where neither exists yet. */}
-          <BookingPanel
-            status={booking}
-            me={playerId}
-            now={now}
-            busy={!!busy}
-            onRefresh={bookingStatus}
-            onMockClan={mockClan}
-            onChangeFlag={changeFlag}
-          />
+          {/* The booking screen used to sit here, permanently, under the match panels. It is a
+              MAIN-MENU popup — it exists hours before there is a step or a survival socket — so
+              it now opens as a dialog («Хто зареєстрований»), and the stage is left to the
+              things that are the match itself. */}
 
           <details className="raw">
             <summary>Стан клієнта (як його бачить UI)</summary>
@@ -721,6 +1014,228 @@ export default function App() {
           </ul>
         </aside>
       </main>
+
+      {/* ─── dialogs ──────────────────────────────────────────────────────────────
+          Everything here is something you LOOK UP or CHANGE about yourself, never something
+          you do during a round: the match panels stay on the stage, where a running timer is
+          visible and nothing has to be dismissed to answer a question. */}
+
+      <Modal
+        open={dialog === 'booking'}
+        onClose={closeDialog}
+        size="lg"
+        busy={!!busy}
+        title="Реєстрація на матч"
+        subtitle={
+          booking ? (
+            <>
+              <span
+                className={`ui-chip ${
+                  booking.registered === undefined ? '' : booking.registered ? 'ok' : 'warn'
+                }`}
+              >
+                {booking.registered === undefined
+                  ? 'сервер не сказав'
+                  : booking.registered
+                    ? '✔ ти зареєстрований'
+                    : '✖ ти не зареєстрований'}
+              </span>{' '}
+              beG.getSurvivalStatus · {new Date(booking.fetchedAt).toLocaleTimeString()}
+            </>
+          ) : (
+            'beG.getSurvivalStatus — той самий список, який головне меню показує задовго до матчу'
+          )
+        }
+        footer={
+          <>
+            {/* The dialog's own failures live in the footer, next to the buttons that raised
+                them and always in view — the body scrolls, and a refusal that scrolled away is
+                a button that looks like it did nothing. */}
+            {dialogError && <span className="spread ui-note bad">{dialogError}</span>}
+            {/* Every one of these is gated on `me` exactly like its toolbar twin: before sign-in
+                main-server's beG guard never calls back, so an ungated button buys the tester a
+                20 s gateway timeout instead of an error. */}
+            <button onClick={bookingStatus} disabled={!!busy || !playerId}>Оновити список</button>
+            <button onClick={mockClan} disabled={!!busy || !playerId}>Створити клан</button>
+            <button onClick={changeFlag} disabled={!!busy || !playerId}>Змінити прапор</button>
+            <button onClick={openCharacterEditor} disabled={!!busy || !playerId}>Персонаж…</button>
+            <button className="primary" onClick={closeDialog} disabled={!!busy}>Закрити</button>
+          </>
+        }
+      >
+        <BookingBody status={booking} me={playerId} now={now} />
+      </Modal>
+
+      <Modal
+        open={dialog === 'lobby'}
+        onClose={closeDialog}
+        busy={!!busy}
+        title="Статус лобі"
+        subtitle={
+          lobbyInfo
+            ? `survival.getLobbyStatus · ${new Date(lobbyInfo.at).toLocaleTimeString()}`
+            : 'survival.getLobbyStatus — питаємо survival-server напряму'
+        }
+        footer={
+          <>
+            {dialogError && <span className="spread ui-note bad">{dialogError}</span>}
+            <button onClick={lobbyStatus} disabled={!!busy}>Оновити</button>
+            <button className="primary" onClick={closeDialog} disabled={!!busy}>Закрити</button>
+          </>
+        }
+      >
+        <div className="ui-stack">
+          <div className="ui-rows">
+            <div className="ui-row"><span>лоббі</span><span><code>{state.lobbyId ?? '—'}</code></span></div>
+            <div className="ui-row"><span>стан</span><span>{state.lobbyState ?? '—'}</span></div>
+            <div className="ui-row"><span>крок клієнта</span><span>{stepLabel[state.step]}</span></div>
+            <div className="ui-row"><span>у ростері</span><span>{players.length || '—'}</span></div>
+            <div className="ui-row"><span>ще в грі</span><span>{alive}</span></div>
+          </div>
+          {/* The roster the reply carries is already adopted into state.players, so it is drawn
+              by the aside on the right; repeating it here would be two lists that can disagree. */}
+          {lobbyInfo ? (
+            <div>
+              <h3 className="ui-h">Відповідь сервера</h3>
+              <RawJson value={lobbyInfo.reply} />
+            </div>
+          ) : (
+            /* survival-server checks `connectedClients.get(connection)` and then boundLobby()
+               (server.ts:832), so this call needs a socket already bound by survival.connect —
+               say so instead of letting the tester read "Not authenticated" as a bug. */
+            <p className="ui-sub">
+              Ще не питали. Виклик іде прямо в survival-server і працює тільки для привʼязаного
+              зʼєднання: без «Зайти в Survival» сервер відповість <code>Not authenticated</code>.
+            </p>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={dialog === 'quote'}
+        onClose={closeDialog}
+        busy={!!busy}
+        title="Ціна викупу"
+        subtitle={
+          quoteInfo
+            ? `survival.getBuyBackQuote · ${new Date(quoteInfo.at).toLocaleTimeString()}`
+            : 'survival.getBuyBackQuote — приватна ціна саме для цього гравця'
+        }
+        footer={
+          <>
+            {dialogError && <span className="spread ui-note bad">{dialogError}</span>}
+            <button onClick={refreshQuote} disabled={!!busy}>Оновити ціну</button>
+            <button className="primary" onClick={closeDialog} disabled={!!busy}>Закрити</button>
+          </>
+        }
+      >
+        <div className="ui-stack">
+          <div className="ui-rows">
+            <div className="ui-row">
+              <span>ціна цієї спроби</span>
+              <span>{state.buybackCost === undefined ? '—' : `🎟 ${state.buybackCost}`}</span>
+            </div>
+            <div className="ui-row">
+              <span>спроба</span>
+              <span>
+                {state.buybackAttempt ?? '—'} / {state.buybackMaxUses ?? '—'}
+              </span>
+            </div>
+            <div className="ui-row"><span>твій баланс</span><span>🎟 {state.tickets ?? '—'}</span></div>
+            <div className="ui-row">
+              <span>по кишені</span>
+              <span>
+                {state.buybackAffordable === undefined
+                  ? 'сервер не сказав'
+                  : state.buybackAffordable
+                    ? 'так'
+                    : 'ні'}
+              </span>
+            </div>
+            <div className="ui-row">
+              <span>вікно закриється</span>
+              <span>
+                {state.buybackClosesAt === undefined
+                  ? '—'
+                  : `через ${Math.max(0, Math.ceil((state.buybackClosesAt - now) / 1000))} с`}
+              </span>
+            </div>
+            {state.buybackUnavailableReason && (
+              <div className="ui-row">
+                <span>недоступно</span>
+                <span title={state.buybackUnavailableReason}>
+                  {reasonText(state.buybackUnavailableReason)}
+                </span>
+              </div>
+            )}
+          </div>
+          {/* Викуп сам по собі лишився на сцені — це частина бою і не ховається в діалог. */}
+          <p className="ui-note">
+            Ціна приватна: сервер шле її подією <b>buyBackOffer</b> у момент відкриття вікна, а
+            цей виклик — спосіб дізнатись її, якщо вкладка перепідключилась і подію проґавила.
+            Сама кнопка «Викупитись» лишається на сцені, у панелі бою.
+          </p>
+          {quoteInfo && (
+            <div>
+              <h3 className="ui-h">Відповідь сервера</h3>
+              <RawJson value={quoteInfo.reply} />
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* The one dialog that WRITES. All three of its calls go through run(), so a refusal comes
+          back as a rejection carrying main-server's own wording, which is what the editor puts
+          on screen. */}
+      <CharacterEditor
+        open={dialog === 'character'}
+        onClose={closeDialog}
+        current={myLook}
+        busy={busy}
+        onApplyCharacter={applyCharacter}
+        onApplyFlag={applyFlag}
+        onGrant={grantToPlayer}
+      />
+    </div>
+  );
+}
+
+/**
+ * One labelled cluster of toolbar buttons.
+ *
+ * The caption is the point: it says what the buttons under it are FOR, which is the one thing
+ * the old flat row could not say. `role="group"` + aria-labelledby gives a screen reader the
+ * same grouping the eye gets, instead of a dozen unrelated buttons in a row.
+ */
+function ToolGroup({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    // These class names belong to App.css, which owns the whole toolbar block — including the
+    // ≤720px rule that drops each group onto its own line. Renaming them here unstyles all of it
+    // silently, which is exactly what happened while this file and the stylesheet were written
+    // in parallel.
+    <div className="tgroup" role="group" aria-labelledby={id}>
+      <span className="tgroup-label" id={id}>
+        {label}
+      </span>
+      <div className="tgroup-buttons">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A server reply, untouched.
+ *
+ * The whole reason a testbed exists is to see what actually came back, so the dialogs that ask
+ * a question show the raw JSON next to the fields the UI read out of it — that is how a renamed
+ * field is caught instead of silently rendering as «—».
+ */
+function RawJson({ value }: { value: unknown }) {
+  return (
+    <div className="ui-scroll-x">
+      <pre className="raw-json">
+        <code>{JSON.stringify(value, null, 2)}</code>
+      </pre>
     </div>
   );
 }
@@ -842,23 +1357,20 @@ const untilText = (ms: number): string => {
  * rendered in the order it arrived (registration order) and numbered from the array index,
  * because `slot` is null for the whole of BOOKING — sorting it, filtering it or numbering it by
  * slot would all break the contract the server side documents.
+ *
+ * It is the BODY of a dialog now, not a panel on the stage: no frame of its own (the dialog is
+ * the frame), no title and no «зареєстрований» pill (both live in the modal header), and no
+ * button row (those are the modal footer, pinned under the scroll so a long roster cannot push
+ * them out of reach).
  */
-function BookingPanel({
+function BookingBody({
   status,
   me,
   now,
-  busy,
-  onRefresh,
-  onMockClan,
-  onChangeFlag,
 }: {
   status: BookingStatus | null;
   me?: string;
   now: number;
-  busy: boolean;
-  onRefresh: () => void;
-  onMockClan: () => void;
-  onChangeFlag: () => void;
 }) {
   const lobby = status?.lobby ?? null;
   const roster = lobby?.roster ?? [];
@@ -867,35 +1379,13 @@ function BookingPanel({
   const total = lobby?.playerCount ?? roster.length;
   const startsAt = lobby?.scheduledStartAt ? Date.parse(lobby.scheduledStartAt) : NaN;
 
-  const registered = status?.registered;
-  const regLabel =
-    registered === undefined
-      ? 'сервер не сказав'
-      : registered
-        ? '✔ ти зареєстрований'
-        : '✖ ти не зареєстрований';
-
   return (
-    <div className="panel booking">
-      <div className="head">
-        <h2>Реєстрація на матч</h2>
-        {status && (
-          <span className={`reg ${registered === undefined ? '' : registered ? 'yes' : 'no'}`}>
-            {regLabel}
-          </span>
-        )}
-        {status && (
-          <span className="fetched">
-            beG.getSurvivalStatus · {new Date(status.fetchedAt).toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-
+    <div className="booking in-modal">
       {!status ? (
         <p className="hint">
-          Натисни «Хто зареєстрований» — це той самий <code>beG.getSurvivalStatus</code>, яким
-          головне меню показує список записаних задовго до матчу. Зʼєднання з survival-server
-          для цього не потрібне.
+          Це той самий <code>beG.getSurvivalStatus</code>, яким головне меню показує список
+          записаних задовго до матчу. Зʼєднання з survival-server для цього не потрібне —
+          натисни «Оновити список» унизу.
         </p>
       ) : status.available === false ? (
         // available:false means survival-server did not answer main-server at all — a different
@@ -970,27 +1460,14 @@ function BookingPanel({
         </>
       )}
 
-      {/* Both are gated on `me` exactly like their toolbar twins: before sign-in main-server's
-          beG guard (`if (connection.player)`) never calls back, so an ungated «Оновити список»
-          buys the tester a 20 s gateway timeout instead of an error. */}
-      <div className="row">
-        <button onClick={onRefresh} disabled={busy || !me}>
-          Оновити список
-        </button>
-        <button onClick={onMockClan} disabled={busy || !me}>
-          Створити клан
-        </button>
-        <button onClick={onChangeFlag} disabled={busy || !me}>
-          Змінити прапор
-        </button>
-        <span className="hint small">
-          «Створити клан» і «Змінити прапор» — суто тестові кнопки, щоб колонки «клан» і «прап.»
-          не були однаковими в усіх рядках (мок-гравці заходять з localhost, тож усім ставиться
-          'UN'). Прапор ставиться справжнім <code>beG.changeFlag</code> і тільки безкоштовний.
-          І клан, і прапор підставляються в ростер у момент реєстрації, тож тисни їх ДО
-          «Зайти в Survival» — інакше зміну буде видно лише в наступному лоббі.
-        </span>
-      </div>
+      <p className="ui-note warn">
+        «Створити клан», «Змінити прапор» і «Персонаж…» унизу — суто тестові кнопки, щоб колонки
+        «клан», «прап.» і «перс.» не були однаковими в усіх рядках (мок-гравці заходять з
+        localhost, тож геоip ставить усім 'UN'). Прапор ставиться справжнім{' '}
+        <code>beG.changeFlag</code>, персонаж — справжнім <code>beG.resetChar</code>.
+        <b> Клан, прапор і персонаж підставляються в ростер у момент реєстрації</b>, тож міняй їх
+        ДО «Зайти в Survival» — інакше зміну буде видно лише в наступному лоббі.
+      </p>
     </div>
   );
 }

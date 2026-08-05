@@ -1,4 +1,28 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   App.css — the survival testbed's own look: the shell (header, toolbar, stage,
+   aside) and every survival panel rendered inside it.
+
+   Two things live here and nowhere else:
+
+   1. THE TOKENS. ui.css (the modal kit) and characterEditor.css deliberately
+      declare none of their own — they read --panel / --line / --accent / --ok /
+      --warn / --bad / --muted out of the :root below. Retuning a value here moves
+      the dialogs with the page instead of leaving them on a stale palette, so the
+      nine base tokens must keep their names AND stay plausible as modal colours.
+   2. THE ELEMENT DEFAULTS (`button`, `body`, focus rings). Everything in the modal
+      kit is class-based (0,1,0) precisely so it outranks these (0,0,1) whatever
+      order the bundler emits the two files in — never make a rule here depend on
+      being loaded first or last.
+
+   Class contract: every class App.tsx uses is styled here under the SAME name.
+   .panel .stage .stepbar .hint .error .players .roster .events .logs .pill
+   .tickets .busy .flagbox .charbox .booking .rosterbox — renaming one silently
+   unstyles markup that is being rewritten in parallel, so they only ever get
+   restyled, never renamed.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
 :root {
+  /* ─── base palette (names are load-bearing — see note 1 above) ─── */
   --bg: #0f1420;
   --panel: #171d2b;
   --line: #263049;
@@ -8,6 +32,52 @@
   --ok: #3ecf8e;
   --bad: #ff6b6b;
   --warn: #ffb648;
+
+  /* ─── surfaces ───────────────────────────────────────────────────────────────
+     These were loose hex literals scattered through this file, and ui.css hard-codes
+     the very same values (it owns no tokens). Naming them once is what keeps a nested
+     box in a panel and a tile in a dialog the same colour after the next retune. */
+  --panel-2: #131a28;    /* a box nested inside a panel: roster, log wells, tiles */
+  --panel-3: #101726;    /* the quietest surface there is: table headers */
+  --field: #101728;      /* text inputs and the map canvas */
+  --surface: #232b3f;    /* control fill: buttons, pills, chips */
+  --surface-hi: #2c3653; /* the same control under the pointer */
+  --line-hi: #3a4767;    /* its border under the pointer */
+  --accent-hi: #7ba1ff;  /* primary button under the pointer */
+  --on-accent: #06102b;  /* ink ON --accent — the palette has no other light-on-blue */
+
+  /* ─── tinted fills ───────────────────────────────────────────────────────────
+     Spelled out instead of color-mix()ed on purpose: the same rgba() literals appear
+     in ui.css and characterEditor.css, and a computed near-miss would show up as two
+     slightly different greens sitting next to each other. */
+  --accent-soft: rgba(91, 140, 255, .12);
+  --accent-line: rgba(91, 140, 255, .4);
+  --ok-soft: rgba(62, 207, 142, .15);
+  --ok-line: rgba(62, 207, 142, .4);
+  --warn-soft: rgba(255, 182, 72, .12);
+  --warn-line: rgba(255, 182, 72, .4);
+  --bad-soft: rgba(255, 107, 107, .12);
+  --bad-line: rgba(255, 107, 107, .4);
+
+  /* ─── scale ──────────────────────────────────────────────────────────────────
+     One spacing ladder for the whole page. The old file picked 6/7/8/10/12/14/16/20
+     ad hoc, which is why nothing lined up vertically. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 28px;
+
+  /* Radii match ui.css's (8 / 10 / 14) so a dialog and a panel share a silhouette. */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --r-pill: 999px;
+
+  --btn-y: 7px; /* vertical padding — the one number that sets control height */
+
   color-scheme: dark;
 }
 
@@ -18,120 +88,421 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
-.app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+::selection { background: rgba(91, 140, 255, .32); }
+
+/* Keyboard focus was invisible everywhere outside a dialog (this file styled no :focus
+   state at all), which made the whole page unusable without a mouse. :where() keeps the
+   rule at specificity 0 so any component that wants a different ring still wins — notably
+   ui.css's `.modal:focus { outline: none }` on the programmatically focused dialog box. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollable wells (roster, events, log) get a thin scrollbar that does not repaint a bright
+   OS-grey bar over a dark panel. Both syntaxes: Firefox understands the first, WebKit the second. */
+.events,
+.logs,
+.roster,
+.stage,
+aside { scrollbar-width: thin; scrollbar-color: #33405e transparent; }
+.events::-webkit-scrollbar,
+.logs::-webkit-scrollbar,
+.roster::-webkit-scrollbar { width: 9px; height: 9px; }
+.events::-webkit-scrollbar-thumb,
+.logs::-webkit-scrollbar-thumb,
+.roster::-webkit-scrollbar-thumb {
+  background: #33405e; border-radius: var(--r-pill); border: 2px solid transparent;
+  background-clip: content-box;
+}
+.events::-webkit-scrollbar-track,
+.logs::-webkit-scrollbar-track,
+.roster::-webkit-scrollbar-track { background: transparent; }
+
+/* ─── shell ─────────────────────────────────────────────────────────────────── */
+
+/* The testbed is opened in several tabs side by side, so the padding has to give way before
+   the content does — a fixed 16px gutter is 10% of a 320px-wide window. */
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(10px, 1.4vw, 20px);
+}
 
 header {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line);
 }
-header h1 { font-size: 18px; margin: 0; }
+header h1 {
+  font-size: 17px; margin: 0; font-weight: 600; letter-spacing: -.01em;
+  /* the title is the one thing allowed to give up its room first when the pills wrap */
+  flex: 0 1 auto; min-width: 0;
+}
 
-.pills { display: flex; gap: 6px; }
+.pills { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
 .pill {
-  padding: 3px 10px; border-radius: 999px; font-size: 12px;
-  background: #232b3f; color: var(--muted); border: 1px solid var(--line);
+  padding: 3px 10px; border-radius: var(--r-pill); font-size: 12px; line-height: 1.5;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--line);
+  white-space: nowrap;
 }
-.pill.ok { background: rgba(62, 207, 142, .15); color: var(--ok); border-color: rgba(62, 207, 142, .4); }
-.pill.bad { background: rgba(255, 107, 107, .15); color: var(--bad); border-color: rgba(255, 107, 107, .4); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+.pill.bad { background: rgba(255, 107, 107, .15); color: var(--bad); border-color: var(--bad-line); }
 
-.who { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.who {
+  margin-left: auto; display: flex; align-items: center; gap: var(--sp-2);
+  color: var(--muted); min-width: 0; flex-wrap: wrap;
+}
 .who b { color: var(--text); }
-.tickets { padding: 3px 10px; border-radius: 8px; background: #232b3f; color: var(--warn); }
-
-.toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0; }
-button {
-  background: #232b3f; color: var(--text); border: 1px solid var(--line);
-  padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+.who code { color: var(--muted); }
+.tickets {
+  padding: 3px 10px; border-radius: var(--r-md); background: var(--surface); color: var(--warn);
+  border: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: .45; cursor: not-allowed; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #06102b; font-weight: 600; }
-.busy { color: var(--muted); align-self: center; }
 
-main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
-@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+/* ─── toolbar ────────────────────────────────────────────────────────────────────
+   The toolbar is a row of LABELLED groups (Стенд / Гравець / Survival / У бою), not the
+   flat heap of eleven buttons it used to be.
+
+   It is written to survive more than one markup shape, because App.tsx is being rewritten
+   against this file by another agent who cannot see it:
+
+     .tgroup > .tgroup-label + button + button          buttons as direct children
+     .tgroup > .tgroup-label + div    > button + button  buttons inside one wrapper
+     .toolbar > button                                   an ungrouped stray, or the old flat row
+
+   All three work because a group is a WRAPPING flex row whose caption claims a full line of
+   its own (flex-basis:100%): whatever follows the caption flows onto the line below it,
+   wrapper or no wrapper. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  /* stretch, so groups of different button counts end up the same height and their captions
+     sit on one line across the row */
+  align-items: stretch;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+
+.toolbar .tgroup,
+.toolbar > section,
+.toolbar > fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: var(--sp-2);
+  /* a flex item defaults to min-width:auto, i.e. "as wide as my widest button"; without this a
+     group of long labels refuses to wrap and pushes the page into horizontal scroll */
+  min-width: 0;
+  margin: 0;
+  padding: 7px 10px 9px;
+  /* recessed rather than raised: the group is a well that holds controls, and the controls
+     (--surface) have to be the thing that stands up out of it */
+  background: rgba(0, 0, 0, .16);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.toolbar .tgroup-label,
+.toolbar .tgroup > legend,
+.toolbar .tgroup > h4,
+.toolbar .tgroup > h5,
+.toolbar > section > h4,
+.toolbar > fieldset > legend {
+  flex: 0 0 100%; /* this is what forces the buttons onto their own line below */
+  margin: 0 0 1px;
+  padding: 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* If the buttons arrive wrapped in a container instead of loose, make that container the
+   wrapping row so both shapes render identically. :not() keeps it off a caption that happens
+   to be a <div>. */
+.toolbar .tgroup > div:not(.tgroup-label),
+.toolbar .tgroup > .tgroup-buttons,
+.toolbar .tgroup > .tgroup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* A stray control that never made it into a group still has to line up with the buttons inside
+   them rather than stretching to the full height of the tallest group. */
+.toolbar > button,
+.toolbar > .busy,
+.toolbar > .tickets { align-self: center; }
+
+/* ─── buttons ────────────────────────────────────────────────────────────────────
+   Every button on the page is 34px tall: 18px line box + 2×7px padding + 2×1px border. The
+   height comes from line-height and NOT from min-height, because ui.css sizes .modal-close
+   explicitly at 30×30 and a min-height here would silently stretch it into a rectangle. */
+button {
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  padding: var(--btn-y) 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease,
+              box-shadow .12s ease, transform .06s ease;
+}
+button:hover:not(:disabled) { background: var(--surface-hi); border-color: var(--line-hi); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .42; cursor: not-allowed; }
+
+button.primary {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  font-weight: 600;
+  /* the glow is the whole point: a primary has to stay the loudest thing in its group even
+     when it sits among five secondaries */
+  box-shadow: 0 0 0 1px rgba(91, 140, 255, .25), 0 2px 12px rgba(91, 140, 255, .22);
+}
+button.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
+button.primary:disabled { box-shadow: none; }
+
+button.big { padding: 10px 20px; font-size: 14px; line-height: 20px; }
+
+/* The in-flight indicator: a live pulse, because its whole job is to say "something is
+   happening and that is why every button just went grey". */
+.busy {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  align-self: center; color: var(--muted); font-size: 12px;
+}
+.busy::before {
+  content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); animation: busy-pulse 1.1s ease-in-out infinite;
+}
+@keyframes busy-pulse {
+  0%, 100% { opacity: .3; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* ─── main grid ─────────────────────────────────────────────────────────────────── */
+
+/* minmax(0,1fr) and not 1fr: a grid track's automatic minimum is its content's, so one long
+   <code> in the log or one wide results table would widen the column and give the PAGE a
+   horizontal scrollbar instead of scrolling inside its own box. */
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: var(--sp-4);
+  align-items: start;
+}
+main > * { min-width: 0; }
+
+/* .stage owns the vertical rhythm of the whole match column, which is why nothing inside it
+   carries its own margin any more — panels come and go with the step, and stacked margins
+   left visible gaps where a panel used to be. */
+.stage {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  min-width: 0;
+}
+.stage > * { min-width: 0; }
+/* Same reasoning as :where(.panel) p — a bare <p className="hint"> sits directly on the stage
+   and must be spaced by the grid gap, not by the UA's 1em margins on top of it. */
+:where(.stage) > p { margin: 0; }
 
 .stepbar {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
-  padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: 9px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
 }
+.stepbar b { font-size: 14px; }
 .stepbar span { color: var(--muted); font-size: 13px; }
-.stepbar .mode { color: var(--accent); }
-.stepbar .timer { margin-left: auto; font-size: 20px; font-weight: 700; color: var(--ok); }
+.stepbar .mode {
+  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line);
+  padding: 1px 9px; border-radius: var(--r-pill); font-size: 11px;
+}
+/* tabular-nums so a two-digit → one-digit countdown does not shift the row it sits in */
+.stepbar .timer {
+  margin-left: auto; font-size: 20px; font-weight: 700; color: var(--ok);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
 .stepbar .timer.hot { color: var(--bad); }
+
+/* ─── panel ─────────────────────────────────────────────────────────────────────── */
 
 .panel {
   position: relative;
   background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 20px;
+  border-radius: var(--r-xl); padding: var(--sp-5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
 }
-.panel h2 { margin: 0 0 12px; font-size: 17px; }
+/* A hairline under the title is what makes it read as a HEADER rather than as the first
+   sentence of the panel — the old h2 was just slightly larger text. */
+.panel h2 {
+  margin: 0 0 var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  font-size: 15px; font-weight: 600; letter-spacing: -.005em;
+}
+/* :where() drops these to the specificity of a bare `p` (0,0,1) — deliberately. They are a
+   default, and every class that states its own rhythm (.answered, .hint, .until, .deny) has to
+   win against them without having to say `.panel` first. They still beat the UA's 1em margins,
+   because author rules outrank the UA sheet whatever their specificity. */
+:where(.panel) p { margin: 0 0 var(--sp-2); }
+:where(.panel) :where(p:last-child) { margin-bottom: 0; }
+
 .hint { color: var(--muted); }
 .error {
-  background: rgba(255, 107, 107, .12); border: 1px solid rgba(255, 107, 107, .4);
-  color: var(--bad); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;
+  background: var(--bad-soft); border: 1px solid var(--bad-line);
+  color: var(--bad); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  overflow-wrap: anywhere;
 }
 .badge {
-  position: absolute; top: 14px; right: 16px;
-  background: #232b3f; color: var(--muted); font-size: 11px;
-  padding: 3px 10px; border-radius: 999px;
+  position: absolute; top: var(--sp-3); right: var(--sp-4);
+  background: var(--surface); color: var(--muted); font-size: 11px;
+  padding: 3px 10px; border-radius: var(--r-pill); border: 1px solid var(--line);
 }
 
-.options { display: grid; gap: 10px; }
-.options button { text-align: left; padding: 14px 16px; font-size: 14px; }
+/* ─── question panels ───────────────────────────────────────────────────────────── */
 
-.chrono { display: grid; gap: 8px; }
-.chrono button { text-align: left; }
+.options { display: grid; gap: var(--sp-2); }
+/* Answer buttons are targets, not toolbar controls: full width, text left, taller. They keep
+   `text-align` (rather than becoming flex boxes) because JSX splits their label into two
+   adjacent text nodes and flex would eat the space between them. */
+.options button,
+.chrono button {
+  width: 100%; text-align: left; padding: 12px 15px; font-size: 14px; line-height: 20px;
+}
+.options button:hover:not(:disabled),
+.chrono button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 
-.number { display: flex; gap: 8px; }
+.chrono { display: grid; gap: var(--sp-2); }
+/* an already-picked event stays readable — it is the ORDER being built, not a dead control */
+.chrono button:disabled { opacity: .55; }
+
+.map { display: grid; gap: var(--sp-2); }
+
+/* These three are grid containers, so the gap is already the spacing — a paragraph's own margin
+   would stack on top of it and open a double gap under the instruction line. */
+:where(.map, .chrono, .options) > p { margin: 0; }
+
+.number { display: flex; gap: var(--sp-2); }
+/* Same box model as a button (18px line + 7px padding + 1px border) so the input and the
+   «Відповісти» next to it are exactly the same height. */
 .number input {
-  flex: 1; background: #101728; border: 1px solid var(--line);
-  color: var(--text); padding: 10px 12px; border-radius: 8px;
+  flex: 1; min-width: 0;
+  background: var(--field); border: 1px solid var(--line);
+  color: var(--text); font: inherit; font-size: 14px; line-height: 18px;
+  padding: var(--btn-y) 12px; border-radius: var(--r-md);
 }
+.number input:focus { border-color: var(--accent); }
 
-.answered { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+.answered { color: var(--muted); font-size: 12px; margin: var(--sp-3) 0 0; }
 
 .results table { width: 100%; border-collapse: collapse; }
-.results th, .results td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
-.results th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.results th, .results td {
+  text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top;
+}
+.results th {
+  color: var(--muted); font-weight: 500; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.results tr:last-child td { border-bottom: none; }
+.results tbody tr:hover td { background: rgba(255, 255, 255, .02); }
 .results tr.out { opacity: .45; }
+/* Answers are raw JSON with no spaces to break on. Without this one row widens the table, the
+   table widens the grid column, and the page grows a horizontal scrollbar. */
+.results td code { overflow-wrap: anywhere; }
 
-.buyback { border-color: var(--warn); }
+.buyback { border-color: var(--warn-line); }
 .buyback .offer {
-  display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline;
-  color: var(--muted); font-size: 13px; margin-bottom: 12px;
+  display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: baseline;
+  color: var(--muted); font-size: 13px; margin-bottom: var(--sp-3);
 }
 .buyback .offer .attempt { color: var(--warn); font-weight: 600; }
 .buyback .offer .hot { color: var(--bad); font-weight: 600; }
-.buyback .row { display: flex; gap: 8px; flex-wrap: wrap; }
-.buyback .deny { color: var(--bad); font-size: 13px; margin: 12px 0 0; }
-.buyback .hint { font-size: 13px; margin: 12px 0 0; }
-.finish { border-color: var(--ok); text-align: center; }
+.buyback .row { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.buyback .deny { color: var(--bad); font-size: 13px; margin: var(--sp-3) 0 0; }
+.buyback .hint { font-size: 13px; margin: var(--sp-3) 0 0; }
 
-aside { display: grid; gap: 10px; }
-aside h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
-aside ul { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-aside li { padding: 6px 10px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+.finish { border-color: var(--ok-line); text-align: center; }
+.finish h2 { border-bottom-color: var(--ok-line); }
+.finish button { margin-top: var(--sp-3); }
+
+.countdown {
+  font-size: 28px; font-weight: 700; color: var(--ok); margin: var(--sp-1) 0 var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The lost-connection banner: the «Зайти заново» button is the point of it, so it is pinned to
+   the far end of the row and the text is allowed to take whatever is left. */
+.error.stale { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.error.stale button { margin-left: auto; }
+
+/* ─── aside ─────────────────────────────────────────────────────────────────────── */
+
+aside { display: grid; gap: var(--sp-2); align-content: start; min-width: 0; }
+/* The rule after the caption is what separates three stacked lists at a glance — they are
+   otherwise three identical dark boxes with a grey word on top. */
+aside h3 {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-1); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; color: var(--muted); letter-spacing: .08em;
+}
+aside h3::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+aside h3:first-child { margin-top: 0; }
+aside ul {
+  list-style: none; margin: 0; padding: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  /* clips the rows to the corner radius; the scrolling lists below re-declare it as auto */
+  overflow: hidden;
+}
+aside li {
+  padding: 6px 10px; border-bottom: 1px solid var(--line);
+  display: flex; gap: var(--sp-2); align-items: baseline; min-width: 0;
+}
 aside li:last-child { border-bottom: none; }
+/* an empty list must not read as a 1px-tall glitch */
+aside ul:empty { display: none; }
 
 /* Roster rows carry pictures now, so they line up on the middle rather than on the
    text baseline — a baseline-aligned image hangs below its row. */
 .players li { align-items: center; }
 .players li.out { opacity: .4; }
 .players .nick { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.players .tail { display: flex; gap: 6px; align-items: center; flex: none; }
+.players .tail { display: flex; gap: var(--sp-1); align-items: center; flex: none; }
 .players .clan {
-  color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: 999px;
-  background: rgba(91, 140, 255, .12); max-width: 110px; overflow: hidden;
+  color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--accent-soft); max-width: 110px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .players .bot { color: var(--muted); font-size: 11px; }
 .players .ready { color: var(--ok); font-size: 12px; }
 .players em { color: var(--bad); font-size: 11px; font-style: normal; }
+
+.events { max-height: 300px; overflow: auto; }
+.events li { align-items: baseline; }
+.events b { color: var(--accent); font-size: 12px; flex: none; }
+.events .tgt { color: var(--muted); font-size: 10px; flex: none; }
+/* flex + min-width:0 is what lets the ellipsis actually happen: a flex item refuses to shrink
+   below its content width by default, so `overflow: hidden` alone never triggers. */
+.events code { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.logs { max-height: 220px; overflow: auto; }
+.logs li {
+  color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
 
 /* ─── roster artwork (FlagImg / CharacterImg) ─────────────────────────────────
    One look for both player lists, because both render the same two components.
@@ -142,13 +513,16 @@ aside li:last-child { border-bottom: none; }
   width: 20px; height: 14px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 3px; overflow: hidden;
+  /* an inset hairline instead of a border: it gives a white flag (Japan, Poland) an edge
+     without taking a pixel off the picture the way a real border would */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
 }
 .flagbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .charbox {
   width: 26px; height: 26px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%; overflow: hidden;
-  background: #232b3f; border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   color: var(--muted); font-size: 10px; font-style: normal;
 }
 .charbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -156,66 +530,73 @@ aside li:last-child { border-bottom: none; }
    element directly, so it beats the value inherited from .charbox — reset it on the element. */
 .charbox i { font-style: normal; }
 
-.events { max-height: 300px; overflow: auto; }
-.events b { color: var(--accent); font-size: 12px; }
-.events .tgt { color: var(--muted); font-size: 10px; }
-.events code { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ─── raw state dump ────────────────────────────────────────────────────────────── */
 
-.logs { max-height: 220px; overflow: auto; }
-.logs li { color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
-
-button.big { padding: 9px 20px; font-size: 14px; }
-
-.raw { margin-top: 14px; color: var(--muted); }
-.raw summary { cursor: pointer; font-size: 12px; padding: 6px 0; }
-.raw table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.raw {
+  color: var(--muted);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 2px var(--sp-3);
+}
+.raw summary {
+  cursor: pointer; font-size: 12px; padding: var(--sp-2) 0;
+  border-radius: var(--r-sm); /* so the focus ring follows the corner, not a bare box */
+}
+.raw summary:hover { color: var(--text); }
+.raw[open] summary { color: var(--text); border-bottom: 1px solid var(--line); }
+.raw table { width: 100%; border-collapse: collapse; margin: var(--sp-2) 0 var(--sp-2); }
 .raw td { padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.raw tr:last-child td { border-bottom: none; }
 .raw td:first-child { color: var(--muted); width: 40%; }
-.raw td:last-child { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
+/* server ids and reason strings have no spaces to break on — see .results td code */
+.raw td:last-child { font-family: ui-monospace, Menlo, monospace; color: var(--text); overflow-wrap: anywhere; }
 
-.finish button { margin-top: 14px; }
+/* ─── map ───────────────────────────────────────────────────────────────────────── */
 
-.leaflet-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
-.leaflet-container { background: #101728; }
+.leaflet-wrap { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line); }
+.leaflet-container { background: var(--field); }
 .leaflet-control-attribution { font-size: 9px; }
-
-.countdown { font-size: 30px; font-weight: 700; color: var(--ok); margin: 6px 0 10px; }
-
-.error.stale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.error.stale button { margin-left: auto; }
 
 /* ─── 1а. Реєстрація (beG.getSurvivalStatus) ─────────────────────────────────
    Sits below the match panels and is always on screen: it is the main-menu booking
-   popup, which exists long before there is a step or a survival connection. */
-.booking { margin-top: 14px; }
-.booking .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.booking .head h2 { margin: 0; }
-.booking .reg {
-  padding: 3px 10px; border-radius: 999px; font-size: 12px;
-  background: #232b3f; color: var(--muted); border: 1px solid var(--line);
-}
-.booking .reg.yes { background: rgba(62, 207, 142, .15); color: var(--ok); border-color: rgba(62, 207, 142, .4); }
-.booking .reg.no { background: rgba(255, 182, 72, .12); color: var(--warn); border-color: rgba(255, 182, 72, .4); }
-.booking .fetched { margin-left: auto; color: var(--muted); font-size: 11px; }
+   popup, which exists long before there is a step or a survival connection.
+   No margin of its own — .stage's grid gap spaces it, so it stays evenly placed
+   whichever match panels happen to be mounted above it. */
+/* The header, the "registered" pill, the fetch timestamp and the button row are NOT here any
+   more: the panel became a dialog, so the modal's own header carries the title and subtitle
+   and the modal's footer carries the buttons. Their rules used to sit right here and were
+   dead — no tsx file emits .booking .head / .reg / .fetched / .booking .row. */
 
-.booking .top { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-.booking .count b { font-size: 26px; font-weight: 700; }
+/* Paragraphs inside the dialog body: the old panel got its rhythm from `:where(.panel) p`,
+   and a modal body is not a .panel, so without this the hints and denials take the UA's
+   `1em 0` and stack a second gap on top of the body padding. */
+.booking.in-modal p { margin: 0 0 var(--sp-2); }
+.booking.in-modal > :last-child { margin-bottom: 0; }
+
+.booking .top { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.booking .count b { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .booking .count span { color: var(--muted); }
-.booking .meta { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; color: var(--muted); font-size: 13px; }
+.booking .meta {
+  display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-left: auto;
+  color: var(--muted); font-size: 13px;
+}
 .booking .meta b { color: var(--text); }
-.booking .until { color: var(--ok); font-weight: 600; margin: 6px 0 12px; }
+.booking .until { color: var(--ok); font-weight: 600; margin: var(--sp-2) 0 var(--sp-3); }
 .booking .deny { color: var(--warn); }
-.booking .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-.booking .hint.small { font-size: 12px; flex: 1 1 260px; }
+.booking .hint.small { font-size: 12px; }
 
-.rosterbox { border: 1px solid var(--line); border-radius: 10px; background: #131a28; overflow: hidden; }
+.rosterbox {
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--panel-2); overflow: hidden;
+}
+/* minmax(0,1fr) on the name column: a 1fr track's automatic minimum is its content, so a long
+   unbroken nickname would stretch the grid and defeat the ellipsis below. */
 .rosterbox .rhead, .roster li {
-  display: grid; grid-template-columns: 30px 26px 28px 1fr auto;
-  gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 30px 26px 28px minmax(0, 1fr) auto;
+  gap: var(--sp-2); align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line);
 }
 .rosterbox .rhead {
   color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
-  background: #101726;
+  background: var(--panel-3);
 }
 /* the header cells share the row grid, so they need the same edge alignment */
 .rosterbox .rhead .num { text-align: right; }
@@ -224,15 +605,53 @@ button.big { padding: 9px 20px; font-size: 14px; }
 .roster li:last-child { border-bottom: none; }
 .roster li.me { background: rgba(91, 140, 255, .08); }
 .roster li.out { opacity: .45; }
-.roster .num { color: var(--muted); font-size: 12px; text-align: right; }
+.roster .num { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 /* .flag / .ch used to be styled here; both cells are now .flagbox / .charbox, shared
    with the aside roster, so the two lists cannot drift apart again. */
 .roster .nick { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.roster .tail { display: flex; gap: 6px; align-items: center; justify-self: end; }
+.roster .tail { display: flex; gap: var(--sp-1); align-items: center; justify-self: end; }
 .roster .clan {
-  color: var(--accent); font-size: 12px; padding: 1px 8px; border-radius: 999px;
-  background: rgba(91, 140, 255, .12); max-width: 160px; overflow: hidden;
+  color: var(--accent); font-size: 12px; padding: 1px 8px; border-radius: var(--r-pill);
+  background: var(--accent-soft); max-width: 160px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .roster .bot { color: var(--muted); font-size: 11px; }
 .roster .mine { color: var(--accent); font-size: 11px; font-weight: 600; }
+
+/* ─── narrow windows ─────────────────────────────────────────────────────────────
+   The testbed is used two and three tabs wide, so these are the working widths, not an
+   afterthought. The single rule they all serve: nothing may make the PAGE scroll sideways. */
+
+@media (max-width: 1080px) {
+  main { grid-template-columns: minmax(0, 1fr); }
+  /* the aside stops being a column and becomes a row of three shorter wells */
+  .events { max-height: 240px; }
+  .logs { max-height: 180px; }
+}
+
+@media (max-width: 720px) {
+  header { gap: var(--sp-2); }
+  .who { margin-left: 0; width: 100%; }
+  .booking .meta { margin-left: 0; }
+  /* one group per line: side by side they would each be one button wide and the captions
+     would carry more width than the controls */
+  .toolbar .tgroup,
+  .toolbar > section,
+  .toolbar > fieldset { flex: 1 1 100%; }
+  .panel { padding: var(--sp-4); }
+  .rosterbox .rhead, .roster li { grid-template-columns: 24px 22px 24px minmax(0, 1fr) auto; gap: var(--sp-1); }
+  .roster .clan, .players .clan { max-width: 84px; }
+  .stepbar .timer { margin-left: 0; }
+}
+
+/* Motion here is all decoration (a pulse, a 1px press, colour fades), so for a user who asked
+   for less of it the correct answer is none rather than slower. Scoped to .app: the modal kit
+   is portalled outside it and already honours the same setting for its own animations. */
+@media (prefers-reduced-motion: reduce) {
+  .app *, .app *::before, .app *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  button:active:not(:disabled) { transform: none; }
+}
