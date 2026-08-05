@@ -25,7 +25,7 @@ export type Step =
 export interface LobbyPlayer {
   playerId: string;
   name?: string;
-  /** avatar index picked at sign-up; the testbed has no art, so it is rendered as a number */
+  /** avatar index picked at sign-up (0..28); drawn as a portrait — see gameAssets.characterIconUrl */
   character?: number;
   /** ISO-3166 alpha-2 country code — 'UN' when main-server could not geolocate the IP */
   flag?: string;

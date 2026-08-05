@@ -118,8 +118,43 @@ aside ul { list-style: none; margin: 0; padding: 0; background: var(--panel); bo
 aside li { padding: 6px 10px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
 aside li:last-child { border-bottom: none; }
 
+/* Roster rows carry pictures now, so they line up on the middle rather than on the
+   text baseline — a baseline-aligned image hangs below its row. */
+.players li { align-items: center; }
 .players li.out { opacity: .4; }
-.players em { margin-left: auto; color: var(--bad); font-size: 11px; font-style: normal; }
+.players .nick { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.players .tail { display: flex; gap: 6px; align-items: center; flex: none; }
+.players .clan {
+  color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  background: rgba(91, 140, 255, .12); max-width: 110px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.players .bot { color: var(--muted); font-size: 11px; }
+.players .ready { color: var(--ok); font-size: 12px; }
+.players em { color: var(--bad); font-size: 11px; font-style: normal; }
+
+/* ─── roster artwork (FlagImg / CharacterImg) ─────────────────────────────────
+   One look for both player lists, because both render the same two components.
+   Every rule here is about the BOX, not the picture: each box keeps its size when the
+   image is missing, fails or is deliberately absent (a bot has no flag), so a 404 can
+   never re-flow a row or shift the column next to it. */
+.flagbox {
+  width: 20px; height: 14px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; overflow: hidden;
+}
+.flagbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.charbox {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; overflow: hidden;
+  background: #232b3f; border: 1px solid var(--line);
+  color: var(--muted); font-size: 10px; font-style: normal;
+}
+.charbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The both-images-failed chip is an <i>, and the UA's `i { font-style: italic }` matches the
+   element directly, so it beats the value inherited from .charbox — reset it on the element. */
+.charbox i { font-style: normal; }
 
 .events { max-height: 300px; overflow: auto; }
 .events b { color: var(--accent); font-size: 12px; }
@@ -190,12 +225,9 @@ button.big { padding: 9px 20px; font-size: 14px; }
 .roster li.me { background: rgba(91, 140, 255, .08); }
 .roster li.out { opacity: .45; }
 .roster .num { color: var(--muted); font-size: 12px; text-align: right; }
-.roster .flag { font-size: 15px; }
-.roster .ch {
-  width: 24px; height: 24px; border-radius: 50%; background: #232b3f; border: 1px solid var(--line);
-  color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; justify-content: center;
-}
-.roster .nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* .flag / .ch used to be styled here; both cells are now .flagbox / .charbox, shared
+   with the aside roster, so the two lists cannot drift apart again. */
+.roster .nick { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roster .tail { display: flex; gap: 6px; align-items: center; justify-self: end; }
 .roster .clan {
   color: var(--accent); font-size: 12px; padding: 1px 8px; border-radius: 999px;

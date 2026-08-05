@@ -14,9 +14,36 @@ import {
   type SurvivalState,
 } from './survival';
 import { MapPicker } from './MapPicker';
+import {
+  characterFullUrl,
+  characterIconUrl,
+  characterName,
+  flagImageUrl,
+  unknownFlagUrl,
+} from './gameAssets';
 import './App.css';
 
 const TARGETS: Target[] = ['main', 'survival'];
+
+/**
+ * Free country codes for «Змінити прапор». Every one of them is in main-server's
+ * `api.beGenius.flags.free` (lib/flags.js) — checked against that list, not picked by taste,
+ * because beG.changeFlag validates the code against `flags.all` and answers "Wrong flag name"
+ * for anything else. Premium flags are deliberately absent: they are in `flags.all` but also
+ * need `player.boughtFlags`, so a mock player only ever gets "not bought" out of them.
+ */
+const TEST_FLAGS = ['UA', 'PL', 'DE', 'FR', 'IT', 'ES', 'JP', 'BR', 'US', 'GB', 'SE', 'TR'];
+
+/**
+ * TEST_FLAGS rotated from a random start: the first code is the one we want, the rest are the
+ * retries. changeFlag rejects the flag ALREADY selected ("Already selected") and the client
+ * cannot know which one that is — the roster carries the flag stamped at REGISTRATION, not the
+ * live one — so the answer is to have somewhere to go next instead of guessing.
+ */
+const flagsToTry = (): string[] => {
+  const start = Math.floor(Math.random() * TEST_FLAGS.length);
+  return TEST_FLAGS.map((_, i) => TEST_FLAGS[(start + i) % TEST_FLAGS.length]);
+};
 
 // sessionStorage is per-tab: a reload keeps this tab's player, a NEW tab starts
 // with nothing stored and therefore gets a brand new mock player.
@@ -207,6 +234,36 @@ export default function App() {
       const clan = await gw().mockClan();
       await fetchBooking();
       return clan;
+    }).catch(() => undefined);
+
+  /**
+   * Testbed convenience, the twin of «Створити клан»: every mock player signs up from
+   * localhost, geoip cannot place that IP and main-server stamps them all 'UN'
+   * (lib/utils.js), so without this the whole roster wears one identical flag and the flag
+   * artwork goes untested.
+   *
+   * beG.changeFlag is the REAL client RPC — the one the profile screen calls — so this is not a
+   * back door: it only accepts free country codes (see TEST_FLAGS) and never a premium flag,
+   * which would need `boughtFlags` and answer "not bought". Drawing the flag the player already
+   * wears is answered with "Already selected"; that is a miss, not a failure, so it retries with
+   * the next code instead of shouting at the tester.
+   */
+  const changeFlag = () =>
+    run('beG.changeFlag (тестовий прапор)', async () => {
+      let denied: Error | undefined;
+      for (const code of flagsToTry()) {
+        try {
+          const res = await gw().call('main', 'beG', 'changeFlag', [code]);
+          // The flag is copied into the roster by RegisterPlayer, exactly like the clan, so this
+          // refresh only redraws the OTHER fields — the new flag shows up in the NEXT lobby.
+          await fetchBooking();
+          return { flag: code, res };
+        } catch (err) {
+          if (!/already selected/i.test((err as Error).message)) throw err;
+          denied = err as Error;
+        }
+      }
+      throw denied ?? new Error('не вдалося змінити прапор');
     }).catch(() => undefined);
 
   // "Insufficient tickets" is the usual first-run trap: top up once and retry
@@ -577,6 +634,7 @@ export default function App() {
             busy={!!busy}
             onRefresh={bookingStatus}
             onMockClan={mockClan}
+            onChangeFlag={changeFlag}
           />
 
           <details className="raw">
@@ -620,13 +678,28 @@ export default function App() {
 
         <aside>
           <h3>Гравці ({alive}/{players.length})</h3>
+          {/* Same artwork components as the booking roster below — the two lists show the same
+              players and must not drift into two different looks. The 🤖/🧑 emoji this replaced
+              said nothing the row does not now say better: a bot has no flag, no clan and the
+              «бот» tag. */}
           <ul className="players">
             {players.map((p) => (
               <li key={p.playerId} className={p.eliminated ? 'out' : ''}>
-                <span>{p.isBot ? '🤖' : '🧑'}</span>
-                <code>{p.playerId === playerId ? 'Я' : p.name || String(p.playerId).slice(0, 12)}</code>
-                {p.ready && !p.eliminated && <span title="готовий">✓</span>}
-                {p.eliminated && <em>вибув</em>}
+                <FlagImg flag={p.flag} />
+                <CharacterImg id={p.character} />
+                <span className="nick" title={p.playerId}>
+                  {p.playerId === playerId ? 'Я' : p.name || String(p.playerId).slice(0, 12)}
+                </span>
+                <span className="tail">
+                  {p.clan && (
+                    <span className="clan" title="клан">
+                      {p.clan}
+                    </span>
+                  )}
+                  {p.isBot && <span className="bot">бот</span>}
+                  {p.ready && !p.eliminated && <span className="ready" title="готовий">✓</span>}
+                  {p.eliminated && <em>вибув</em>}
+                </span>
               </li>
             ))}
           </ul>
@@ -652,17 +725,90 @@ export default function App() {
   );
 }
 
+// ─── roster artwork ───────────────────────────────────────────────────────────
+// Two components, used by BOTH player lists (the aside roster and the booking table), so the
+// lists cannot drift apart. Neither of them knows how a flag or a character maps to a file —
+// that lives in gameAssets.ts and nowhere else.
+
 /**
- * The flag arrives as an ISO-3166 alpha-2 code ('UA', or 'UN' when main-server could not
- * geolocate the sign-up IP), never as an emoji — so it is composed here from the two regional
- * indicators. Anything that is not exactly two ASCII letters is shown verbatim instead of being
- * turned into two random glyphs, which is what a renamed field would look like.
+ * Walk a chain of candidate image URLs, dropping to the next one every time one fails, and end
+ * at `null` rather than at a broken image.
+ *
+ * Running off the end of the chain has to be a real state: an <img> whose last source 404s
+ * paints the browser's broken-image glyph, which is a different size from the picture and
+ * therefore re-flows the row it sits in. `null` lets the caller keep the box and draw something
+ * neutral inside it.
+ *
+ * The reset is done during render instead of in an effect because these rows are recycled: a
+ * roster update reuses the same component instance for a DIFFERENT player, and an effect would
+ * leave one frame showing the previous player's picture — and, worse, a failure count that
+ * belonged to that player's URLs.
  */
-const flagEmoji = (code: unknown): string => {
-  const cc = typeof code === 'string' ? code.trim().toUpperCase() : '';
-  if (!/^[A-Z]{2}$/.test(cc)) return cc || '🏳';
-  return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
-};
+function useImageChain(chain: (string | null)[]): [string | null, () => void] {
+  const urls = chain.filter((u): u is string => !!u);
+  const key = urls.join('|');
+  const [tried, setTried] = useState({ key, failed: 0 });
+  if (tried.key !== key) setTried({ key, failed: 0 });
+  const failed = tried.key === key ? tried.failed : 0;
+  return [urls[failed] ?? null, () => setTried({ key, failed: failed + 1 })];
+}
+
+/**
+ * The country or premium flag as the game draws it, never as an emoji: main-server stores either
+ * an ISO-3166 alpha-2 code or a bought flag's NAME in the very same field, and flagImageUrl is
+ * the only thing that knows which is which.
+ *
+ * An empty flag means a BOT (survival-server's botProfile leaves it ''), and a bot is drawn with
+ * no flag at all — the empty box still holds the column so a bot row and a player row line up.
+ * A live player is never '': main-server stamps 'UN' when geoip cannot place the sign-up IP.
+ * The title is the RAW value on purpose — the point of a testbed is seeing what the server sent.
+ */
+function FlagImg({ flag }: { flag?: unknown }) {
+  const raw = typeof flag === 'string' ? flag.trim() : '';
+  const primary = flagImageUrl(raw);
+  // The fallback is appended only when there IS a primary: adding it unconditionally would give
+  // every bot the white "unknown" flag, which is exactly the flag a bot must not have. It is also
+  // dropped when the primary already IS that fallback — flagImageUrl answers unknownFlagUrl for
+  // '??' and for anything it fails to recognise — because re-setting a byte-identical src is a
+  // no-op for React and the browser: no second error fires and the chain would hang instead of
+  // ever reaching its empty state.
+  const chain = primary ? (primary === unknownFlagUrl ? [primary] : [primary, unknownFlagUrl]) : [];
+  const [src, onError] = useImageChain(chain);
+  return (
+    <span className="flagbox" title={raw === '' ? 'бот — прапора немає' : raw}>
+      {src && <img src={src} alt={raw} onError={onError} loading="lazy" />}
+    </span>
+  );
+}
+
+/**
+ * The character portrait: the row icon first, the full-body art as the fallback (the two folders
+ * are not in perfect sync — a missing Icon*.png is a case the admin panel hits too), and a
+ * neutral chip when neither loads or when the index is not one the game has.
+ *
+ * All three states are the SAME box, so a 404 never resizes the row. The chip falls back to the
+ * raw index, which is what this panel showed before there was any art and is still the most
+ * useful thing to read when the picture is the broken part.
+ */
+function CharacterImg({ id }: { id?: unknown }) {
+  const index = typeof id === 'number' && Number.isFinite(id) ? id : undefined;
+  const name = characterName(index);
+  const [src, onError] = useImageChain([characterIconUrl(index), characterFullUrl(index)]);
+  const title = name
+    ? `${name} (#${index})`
+    : index === undefined
+      ? 'персонаж не вказано'
+      : `персонаж #${index} — гра такого не має`;
+  return (
+    <span className="charbox" title={title}>
+      {src ? (
+        <img src={src} alt={title} onError={onError} loading="lazy" />
+      ) : (
+        <i>{index ?? '—'}</i>
+      )}
+    </span>
+  );
+}
 
 /** 1 гравець · 2 гравці · 5 гравців — this count is the headline, so it has to agree. */
 const playersWord = (n: number): string => {
@@ -704,6 +850,7 @@ function BookingPanel({
   busy,
   onRefresh,
   onMockClan,
+  onChangeFlag,
 }: {
   status: BookingStatus | null;
   me?: string;
@@ -711,6 +858,7 @@ function BookingPanel({
   busy: boolean;
   onRefresh: () => void;
   onMockClan: () => void;
+  onChangeFlag: () => void;
 }) {
   const lobby = status?.lobby ?? null;
   const roster = lobby?.roster ?? [];
@@ -832,9 +980,15 @@ function BookingPanel({
         <button onClick={onMockClan} disabled={busy || !me}>
           Створити клан
         </button>
+        <button onClick={onChangeFlag} disabled={busy || !me}>
+          Змінити прапор
+        </button>
         <span className="hint small">
-          «Створити клан» — суто тестова кнопка (adminApi), щоб колонка «клан» не була порожньою.
-          Клан підставляється в ростер у момент реєстрації, тож тисни її ДО «Зайти в Survival».
+          «Створити клан» і «Змінити прапор» — суто тестові кнопки, щоб колонки «клан» і «прап.»
+          не були однаковими в усіх рядках (мок-гравці заходять з localhost, тож усім ставиться
+          'UN'). Прапор ставиться справжнім <code>beG.changeFlag</code> і тільки безкоштовний.
+          І клан, і прапор підставляються в ростер у момент реєстрації, тож тисни їх ДО
+          «Зайти в Survival» — інакше зміну буде видно лише в наступному лоббі.
         </span>
       </div>
     </div>
@@ -859,12 +1013,9 @@ function RosterRow({ entry, index, me }: { entry: LobbyPlayer; index: number; me
     <li className={`${mine ? 'me' : ''} ${row.eliminated ? 'out' : ''}`}>
       {/* 1..N from the ARRAY INDEX: `slot` is null for the whole of BOOKING */}
       <span className="num">{index + 1}</span>
-      <span className="flag" title={typeof row.flag === 'string' ? row.flag : 'прапор невідомий'}>
-        {flagEmoji(row.flag)}
-      </span>
-      <span className="ch" title={`персонаж ${row.character ?? '—'}`}>
-        {typeof row.character === 'number' ? row.character : '—'}
-      </span>
+      {/* the same two components the aside roster uses — see «roster artwork» above */}
+      <FlagImg flag={row.flag} />
+      <CharacterImg id={row.character} />
       <span className="nick" title={id}>
         {name || (id ? id.slice(0, 12) : '—')}
       </span>

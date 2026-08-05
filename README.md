@@ -16,7 +16,17 @@ survival-testbed/
 │   └── main-server.env           neutral .env mounted over the baked-in one
 ├── gateway/                      JSTP↔WebSocket bridge for the browser (host)
 └── web/                          React test client (host)
+    └── public/characters/        game artwork, COPIED — see below
 ```
+
+`web/public/characters/` holds the 29 character portraits (`char0.png`…`char28.png`)
+and their 29 row icons (`Icon<Name>.png`), copied verbatim from
+`../admin-tools-react-frontend/public/characters/` — keep the two in step if the game
+ever ships another character. The booking roster draws those portraits locally and
+fetches flag images from `flagcdn.com` / wikimedia, so the browser needs network
+access (the admin panel this artwork comes from works the same way). Every mapping
+from roster data to artwork — character index → portrait, country code or premium
+flag name → image — lives in `web/src/gameAssets.ts` and nowhere else.
 
 ## Run it
 

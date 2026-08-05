@@ -54,6 +54,41 @@ const TARGETS = {
 
 const DEVICE_MODEL = 'SurvivalTestbed';
 
+// How many characters the game has. The source of truth is CHARACTER_COUNT in
+// web/src/gameAssets.ts (which lists all 29 by name); this gateway is plain Node and cannot
+// import from the Vite app, so the number is repeated here — keep the two in step.
+//
+// 29 is genuinely safe to send to auth.signUp, verified in main-server rather than assumed:
+//   * signUp (api/auth/signUp.js -> lib/registration.js) passes `character` STRAIGHT to
+//     player.createPlayer with no validation and no clamping;
+//   * createPlayer looks up `api.beGenius.items.default[character]` and iterates it — an index
+//     with no default items would throw, be swallowed by signUp's try/catch and come back as
+//     the opaque "Cannot finish registration". files/items.json defines default items for every
+//     id 0..28, so none of them can hit that;
+//   * lib/characters.js allCharacters has all 29 ids, so contexts.sumSkills's
+//     `allCharacters[characterId].bonusSkill` (unguarded lookup, guarded use) is safe too;
+//   * the ownership gate (shop/buyCharacter.js, characters.resetChar) applies only to CHANGING
+//     a character later — signUp never consults boughtCharacters, so premium ids 25..28 and
+//     reborn ids 15..24 are accepted for a fresh account exactly like the basic ones.
+// 0..28 is therefore the widest range that genuinely works: index 29 and up has no default
+// items and would come back as a failed signUp. The one oddity is that a fresh account is not
+// reborn, so a reborn/premium id is a pairing the real game never makes — harmless here,
+// because only characters.resetChar (which the testbed never calls) checks that pairing.
+const MOCK_CHARACTER_COUNT = 29;
+
+// Rotate through the characters per CREATED ACCOUNT rather than per tab: «Новий гравець»
+// makes a fresh account on the same WebSocket (same tabId), so keying off the tab would hand
+// every player in that tab the same portrait and the roster's character column would stay flat.
+// Start at 1 because 0 (Darwin) is what survival-server's botProfile gives every bot — leaving
+// it for last keeps live rows visually distinct from bot rows in a small test lobby.
+let nextMockCharacter = 1;
+
+function pickMockCharacter() {
+  const character = nextMockCharacter % MOCK_CHARACTER_COUNT;
+  nextMockCharacter += 1;
+  return character;
+}
+
 // ─── per-tab client ───────────────────────────────────────────────────────────
 
 let nextTabId = 1;
@@ -192,17 +227,20 @@ async function ensureMockUser(client, reuse) {
   let deviceId = reuse && reuse.deviceId;
 
   if (!accountId) {
+    const character = pickMockCharacter();
     const created = await client.call('main', 'auth', 'signUp', [
       {
         language: 'en',
-        character: client.tabId % 5,
+        character,
         categories: ['history', 'geography', 'sport'],
         isTrial: false,
       },
     ]);
     accountId = String((created && (created.accountId || created.id)) || created);
     deviceId = `testbed-tab${client.tabId}-${Math.random().toString(16).slice(2, 8)}`;
-    client.log('created account', accountId);
+    // Log the index, not a name: mapping index -> name lives in web/src/gameAssets.ts and
+    // duplicating those 29 names here would be one more thing to keep in step for nothing.
+    client.log('created account', accountId, `(character ${character})`);
   }
 
   const signInRes = await client.call('main', 'auth', 'signIn', [
