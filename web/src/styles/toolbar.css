@@ -1,0 +1,90 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   toolbar.css — the labelled control groups under the header: .toolbar, .tgroup,
+   .tgroup-label, .tgroup-buttons, and the stray ungrouped control.
+
+   It is a file of its own because of the markup contract documented in the banner
+   below: the block renders identically for three different DOM shapes, and that
+   reasoning is the reason every selector here looks over-specified. ui/shell.css once
+   carried a second copy of this block under different class names and won on import
+   order — one component, one owner, and the owner is this file.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── toolbar ────────────────────────────────────────────────────────────────────
+   The toolbar is a row of LABELLED groups (Стенд / Гравець / Survival / У бою), not the
+   flat heap of eleven buttons it used to be.
+
+   It is written to survive more than one markup shape, because App.tsx is being rewritten
+   against this file by another agent who cannot see it:
+
+     .tgroup > .tgroup-label + button + button          buttons as direct children
+     .tgroup > .tgroup-label + div    > button + button  buttons inside one wrapper
+     .toolbar > button                                   an ungrouped stray, or the old flat row
+
+   All three work because a group is a WRAPPING flex row whose caption claims a full line of
+   its own (flex-basis:100%): whatever follows the caption flows onto the line below it,
+   wrapper or no wrapper. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  /* stretch, so groups of different button counts end up the same height and their captions
+     sit on one line across the row */
+  align-items: stretch;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+
+.toolbar .tgroup,
+.toolbar > section,
+.toolbar > fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: var(--sp-2);
+  /* a flex item defaults to min-width:auto, i.e. "as wide as my widest button"; without this a
+     group of long labels refuses to wrap and pushes the page into horizontal scroll */
+  min-width: 0;
+  margin: 0;
+  padding: 7px 10px 9px;
+  /* recessed rather than raised: the group is a well that holds controls, and the controls
+     (--surface) have to be the thing that stands up out of it */
+  background: rgba(0, 0, 0, .16);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.toolbar .tgroup-label,
+.toolbar .tgroup > legend,
+.toolbar .tgroup > h4,
+.toolbar .tgroup > h5,
+.toolbar > section > h4,
+.toolbar > fieldset > legend {
+  flex: 0 0 100%; /* this is what forces the buttons onto their own line below */
+  margin: 0 0 1px;
+  padding: 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* If the buttons arrive wrapped in a container instead of loose, make that container the
+   wrapping row so both shapes render identically. :not() keeps it off a caption that happens
+   to be a <div>. */
+.toolbar .tgroup > div:not(.tgroup-label),
+.toolbar .tgroup > .tgroup-buttons,
+.toolbar .tgroup > .tgroup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* A stray control that never made it into a group still has to line up with the buttons inside
+   them rather than stretching to the full height of the tallest group. */
+.toolbar > button,
+.toolbar > .busy,
+.toolbar > .tickets { align-self: center; }

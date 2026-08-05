@@ -1,0 +1,58 @@
+/* Layout and form primitives — the shapes a dialog body is placed INTO: its vertical rhythm,
+   its headings and sub-text, an action row, the horizontal-scroll escape hatch, and the
+   labelled input. Nothing here draws a widget; the widgets are in the three files after it. */
+
+/* ─── generic building blocks ────────────────────────────────────────────────────
+   Everything below is content-agnostic and meant to be composed inside .modal-body
+   (nothing stops it being used outside one). */
+
+/* Vertical rhythm container — the default gap between a modal body's sections. */
+.ui-stack { display: grid; gap: 14px; }
+.ui-stack.tight { gap: 8px; }
+
+/* Section heading inside a dialog. Deliberately quieter than .panel h2: a modal already
+   has a real title in its header, so these are subheadings, not competing headlines. */
+.ui-h {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+.ui-sub { color: var(--muted); font-size: 12px; margin: 0; }
+
+/* Free-flowing row of controls. .spacer pushes everything after it to the right. */
+.ui-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ui-actions .spacer { margin-left: auto; }
+
+/* Wrap anything that can be wider than the dialog (a table, a long <code>) in this, so it
+   scrolls on its own instead of forcing .modal-body to overflow horizontally. */
+.ui-scroll-x { overflow-x: auto; max-width: 100%; }
+
+/* ─── form field ─────────────────────────────────────────────────────────────── */
+
+.ui-field { display: block; }
+.ui-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+/* App.css only styles `.number input`, which is bound to the survival answer panel. This is
+   the same look expressed as a class, so it works on any input in any dialog. */
+.ui-input {
+  width: 100%;
+  background: #101728;
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 11px;
+  border-radius: 8px;
+  font: inherit;
+}
+.ui-input:focus { border-color: var(--accent); }
+.ui-input::placeholder { color: #5c6880; }
+.ui-input:disabled { opacity: .5; cursor: not-allowed; }

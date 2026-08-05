@@ -1,0 +1,83 @@
+/* The tile grid — pick-one-of-many with artwork. Split out on its own because .ui-tile
+   carries more rules than anything else in the kit (the fixed-size box, the art frame, the
+   selected tint, the "locked but still clickable" state) and every one of them is about that
+   single widget. */
+
+/* ─── tile grid (pick-one-of-many with artwork) ──────────────────────────────── */
+
+/* --ui-min is the smallest a tile may get before the grid drops a column. Callers set it to
+   suit their artwork (small icons vs. portraits) so one grid class covers both instead of
+   spawning .ui-grid-small / .ui-grid-big. */
+.ui-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ui-min, 92px), 1fr));
+  gap: 10px;
+}
+
+/* A selectable tile, normally a <button>: artwork above, one line of caption below.
+   Every part of the box has a fixed size, so a picture that 404s, a name that is twice as
+   long as its neighbours, or a grid that swaps out its contents can never re-flow the rows
+   around it. */
+.ui-tile {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  background: #131a28;
+  text-align: center;
+}
+.ui-tile .art {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1422;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ui-tile .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Portrait art is framed for a full body, so `cover` on a square crops the head off.
+   Add .tall to the art box when the picture must be shown whole. */
+.ui-tile .art.tall { aspect-ratio: 3 / 4; }
+.ui-tile .art.fit img { object-fit: contain; }
+.ui-tile .cap {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* `:hover` is restated on purpose. App.css's `button:hover:not(:disabled)` is (0,2,1) and is
+   emitted AFTER this file, so it outranks a bare `.is-on` and wipes the selection tint off the
+   one tile the pointer is over — precisely the tile the tester is looking at. Repeating the
+   selected state at hover-level specificity is what keeps "selected" visible while pointing.
+   Same reason for .ui-picks and .ui-seg below. */
+.ui-tile.is-on,
+.ui-tile.is-on:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(91, 140, 255, .12);
+}
+.ui-tile.is-on .cap { color: var(--text); }
+/* "Locked" is NOT "disabled": a tile the player does not own yet is still clickable, because
+   clicking it is how the editor learns to grant it first. It only has to LOOK unavailable. */
+.ui-tile.is-locked .art { opacity: .4; }
+.ui-tile .lock {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 182, 72, .16);
+  border: 1px solid rgba(255, 182, 72, .45);
+  color: var(--warn);
+  font-size: 10px;
+  line-height: 1.4;
+}

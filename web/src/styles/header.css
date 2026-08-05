@@ -1,0 +1,49 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   header.css — the page frame (.app) and the row on top of it: the title, the status
+   pills, the .who identity block and the .tickets counter.
+
+   Split from toolbar.css because the header is what the tester READS (am I connected,
+   who am I logged in as, how many tickets are left) while the toolbar is what he
+   presses; they share nothing but the row they sit in. Their narrow-window behaviour
+   is in responsive.css, which must stay imported last.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── shell ─────────────────────────────────────────────────────────────────── */
+
+/* The testbed is opened in several tabs side by side, so the padding has to give way before
+   the content does — a fixed 16px gutter is 10% of a 320px-wide window. */
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(10px, 1.4vw, 20px);
+}
+
+header {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line);
+}
+header h1 {
+  font-size: 17px; margin: 0; font-weight: 600; letter-spacing: -.01em;
+  /* the title is the one thing allowed to give up its room first when the pills wrap */
+  flex: 0 1 auto; min-width: 0;
+}
+
+.pills { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+.pill {
+  padding: 3px 10px; border-radius: var(--r-pill); font-size: 12px; line-height: 1.5;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+.pill.bad { background: rgba(255, 107, 107, .15); color: var(--bad); border-color: var(--bad-line); }
+
+.who {
+  margin-left: auto; display: flex; align-items: center; gap: var(--sp-2);
+  color: var(--muted); min-width: 0; flex-wrap: wrap;
+}
+.who b { color: var(--text); }
+.who code { color: var(--muted); }
+.tickets {
+  padding: 3px 10px; border-radius: var(--r-md); background: var(--surface); color: var(--warn);
+  border: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums;
+}

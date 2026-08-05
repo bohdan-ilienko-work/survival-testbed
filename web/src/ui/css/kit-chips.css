@@ -1,0 +1,72 @@
+/* Chips and toggles — the read-only badge, the multi-select pick row and the one-of-N
+   segmented picker. Together because all three are the same pill-shaped idea in three
+   flavours, and all three have to restate their selected state at hover specificity for the
+   reason spelled out below. */
+
+/* ─── chips ──────────────────────────────────────────────────────────────────────
+   The static read-only variant of .pill from App.css. It is duplicated rather than reused
+   because .pill is the header's badge and App.css is not this agent's file to widen — and
+   because chips inside a dialog also come in a clickable flavour (.ui-picks below). */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #232b3f;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ui-chip.ok { background: rgba(62, 207, 142, .15); color: var(--ok); border-color: rgba(62, 207, 142, .4); }
+.ui-chip.warn { background: rgba(255, 182, 72, .12); color: var(--warn); border-color: rgba(255, 182, 72, .4); }
+.ui-chip.bad { background: rgba(255, 107, 107, .15); color: var(--bad); border-color: rgba(255, 107, 107, .4); }
+.ui-chip.accent { background: rgba(91, 140, 255, .12); color: var(--accent); border-color: rgba(91, 140, 255, .4); }
+
+/* Multi-select: a wrapping row of toggle <button>s. Use it when the answer is "any N of
+   these" — for one-of-N use .ui-seg, which reads as a single control. */
+.ui-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.ui-picks > button {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ui-picks > button.is-on,
+.ui-picks > button.is-on:hover:not(:disabled) {
+  background: rgba(91, 140, 255, .15);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ─── segmented picker (one of N) ───────────────────────────────────────────────
+   The segments are welded into a single pill on purpose: N loose buttons read as N
+   independent actions, which is exactly the "кнопки куди попало" problem this UI exists to
+   fix. One outline means one choice. */
+.ui-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #131a28;
+}
+.ui-seg > button {
+  border: none;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 13px;
+  font-size: 12px;
+}
+.ui-seg > button:last-child { border-right: none; }
+.ui-seg > button:hover:not(:disabled) { background: #1a2233; color: var(--text); }
+/* The hover rule above is (0,3,1) and would grey out the ACTIVE tab under the pointer, so the
+   selected state has to be restated at hover level here too — this one loses to its own file,
+   not just to App.css. */
+.ui-seg > button.is-on,
+.ui-seg > button.is-on:hover:not(:disabled) {
+  background: var(--accent); color: #06102b; font-weight: 600;
+}

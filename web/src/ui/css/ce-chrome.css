@@ -1,0 +1,26 @@
+/* Editor chrome — the bits of the character editor that belong to neither tab: the tab strip,
+   and the two scoped overrides both tabs depend on. Matches EditorChrome.tsx.
+
+   The rules of this stylesheet (every selector `ce-`-prefixed or scoped under `.ce`, every
+   override winning on specificity rather than on import order) are stated once, in the barrel
+   at ../characterEditor.css, and hold for every part. */
+
+/* .ui-seg is inline-flex, but as a child of the .ui-stack grid it would stretch edge to edge and
+   stop reading as one control. */
+.ce-tabs {
+  justify-self: start;
+}
+
+/* The section note beside a .ui-h heading: same line, quieter, not shouted in caps. */
+.ce .ui-h span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* Spacing for a note or an action row that follows a block it belongs to. Scoped so it beats
+   .ui-sub's `margin: 0` on specificity rather than on order. */
+.ce .ce-gap {
+  margin-top: 8px;
+}

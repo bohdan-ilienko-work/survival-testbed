@@ -1,0 +1,50 @@
+/* Readouts — the two shapes a dialog uses to SHOW something rather than to collect it: the
+   key/value rows of "what the server currently thinks", and the callout where a refusal gets
+   explained. */
+
+/* ─── key/value rows ─────────────────────────────────────────────────────────────
+   For "what the server currently thinks" blocks: a label column and a value column that
+   wraps instead of stretching the dialog. */
+.ui-rows {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #131a28;
+  overflow: hidden;
+}
+.ui-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.ui-row:last-child { border-bottom: none; }
+.ui-row > :first-child { flex: 0 0 38%; color: var(--muted); }
+/* `anywhere` and not `break-word`: these values are ids and raw server strings with no
+   spaces to break on, and without it one of them widens the whole dialog. */
+.ui-row > :last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* ─── callout ────────────────────────────────────────────────────────────────────
+   Where a server refusal gets explained. Neutral by default so an explanatory note does not
+   look like an error; the coloured variants are for the real thing. */
+.ui-note {
+  /* A note is often a <p>, and nothing in this app resets paragraph margins — App.css only
+     does it under .panel, which a dialog body is not. Without this the UA's `1em 0` doubles
+     the .ui-stack gap for notes while their <div> siblings keep it. */
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #131a28;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ui-note b { color: var(--text); }
+.ui-note.ok { background: rgba(62, 207, 142, .1); border-color: rgba(62, 207, 142, .35); color: var(--ok); }
+.ui-note.warn { background: rgba(255, 182, 72, .1); border-color: rgba(255, 182, 72, .35); color: var(--warn); }
+.ui-note.bad { background: rgba(255, 107, 107, .1); border-color: rgba(255, 107, 107, .35); color: var(--bad); }
+.ui-note.ok b,
+.ui-note.warn b,
+.ui-note.bad b { color: inherit; }

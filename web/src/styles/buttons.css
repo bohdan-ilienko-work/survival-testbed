@@ -1,0 +1,60 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   buttons.css — the bare `button` contract that gives every control on the page one
+   height, its .primary / .big variants, and the .busy in-flight indicator that stands
+   in the toolbar rows beside them.
+
+   .busy lives here rather than in toolbar.css because it is not a toolbar part: it is
+   the answer to "why did every button just go grey", and it is placed wherever a call
+   is in flight. Everything that overrides the `button` rule (.options button, ui.css's
+   .modal-close) wins on specificity rather than on order — but the position of this
+   file in App.css's import list is still exactly where the block sat before the split.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── buttons ────────────────────────────────────────────────────────────────────
+   Every button on the page is 34px tall: 18px line box + 2×7px padding + 2×1px border. The
+   height comes from line-height and NOT from min-height, because ui.css sizes .modal-close
+   explicitly at 30×30 and a min-height here would silently stretch it into a rectangle. */
+button {
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  padding: var(--btn-y) 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease,
+              box-shadow .12s ease, transform .06s ease;
+}
+button:hover:not(:disabled) { background: var(--surface-hi); border-color: var(--line-hi); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .42; cursor: not-allowed; }
+
+button.primary {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  font-weight: 600;
+  /* the glow is the whole point: a primary has to stay the loudest thing in its group even
+     when it sits among five secondaries */
+  box-shadow: 0 0 0 1px rgba(91, 140, 255, .25), 0 2px 12px rgba(91, 140, 255, .22);
+}
+button.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
+button.primary:disabled { box-shadow: none; }
+
+button.big { padding: 10px 20px; font-size: 14px; line-height: 20px; }
+
+/* The in-flight indicator: a live pulse, because its whole job is to say "something is
+   happening and that is why every button just went grey". */
+.busy {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  align-self: center; color: var(--muted); font-size: 12px;
+}
+.busy::before {
+  content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); animation: busy-pulse 1.1s ease-in-out infinite;
+}
+@keyframes busy-pulse {
+  0%, 100% { opacity: .3; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1); }
+}

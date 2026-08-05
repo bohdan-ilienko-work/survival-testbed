@@ -1,0 +1,47 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   responsive.css — the narrow-window overrides and the reduced-motion opt-out.
+
+   MUST be the LAST @import in App.css. Every rule in here restates a property another
+   module already set at the SAME specificity — <main>'s columns, .panel's padding, the
+   roster grid, .stepbar .timer's margin, the .clan chips' width — so each one wins only
+   by being emitted after the module it overrides. Move this line up the import list and
+   the page keeps its desktop layout at 700px wide with no error anywhere to show for it.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── narrow windows ─────────────────────────────────────────────────────────────
+   The testbed is used two and three tabs wide, so these are the working widths, not an
+   afterthought. The single rule they all serve: nothing may make the PAGE scroll sideways. */
+
+@media (max-width: 1080px) {
+  main { grid-template-columns: minmax(0, 1fr); }
+  /* the aside stops being a column and becomes a row of three shorter wells */
+  .events { max-height: 240px; }
+  .logs { max-height: 180px; }
+}
+
+@media (max-width: 720px) {
+  header { gap: var(--sp-2); }
+  .who { margin-left: 0; width: 100%; }
+  .booking .meta { margin-left: 0; }
+  /* one group per line: side by side they would each be one button wide and the captions
+     would carry more width than the controls */
+  .toolbar .tgroup,
+  .toolbar > section,
+  .toolbar > fieldset { flex: 1 1 100%; }
+  .panel { padding: var(--sp-4); }
+  .rosterbox .rhead, .roster li { grid-template-columns: 24px 22px 24px minmax(0, 1fr) auto; gap: var(--sp-1); }
+  .roster .clan, .players .clan { max-width: 84px; }
+  .stepbar .timer { margin-left: 0; }
+}
+
+/* Motion here is all decoration (a pulse, a 1px press, colour fades), so for a user who asked
+   for less of it the correct answer is none rather than slower. Scoped to .app: the modal kit
+   is portalled outside it and already honours the same setting for its own animations. */
+@media (prefers-reduced-motion: reduce) {
+  .app *, .app *::before, .app *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  button:active:not(:disabled) { transform: none; }
+}

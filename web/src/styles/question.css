@@ -1,0 +1,153 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   question.css — everything a round's question renders inside a .panel: the .options
+   answer buttons, the CHRONO pairing UI with its drag layer, the .map and .number
+   inputs, the .answered footnote under a sent answer, and the .results table.
+
+   One file because it is one screen and one cascade. All four answer shapes share the
+   `:where(.map, .chrono, .options) > p` reset near the bottom, which does its job only
+   while it stays after stage.css's `:where(.panel) p` — an order this file's position
+   in App.css's import list is what preserves. The chrono block is the biggest single
+   idea here and keeps its own banners below: pairing rows first, then the drag layer.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── question panels ───────────────────────────────────────────────────────────── */
+
+.options { display: grid; gap: var(--sp-2); }
+/* Answer buttons are targets, not toolbar controls: full width, text left, taller. */
+.options button {
+  width: 100%; text-align: left; padding: 12px 15px; font-size: 14px; line-height: 20px;
+}
+.options button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+
+/* ─── CHRONO: pairing an event with its year ───────────────────────────────────────
+   Not a list of answer buttons any more: a pool of still-free years on top, then one boxed row
+   per event — its assigned year in the slot on the left, the whole year strip as chips on the
+   right. Years are DRAGGED onto a row; the strip stays clickable because drag-and-drop has no
+   keyboard gesture (see the note on ChronoPairing). */
+.chrono { display: grid; gap: var(--sp-2); }
+.chrono .hint.small { font-size: 12px; }
+
+.pair-row {
+  display: grid; gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-lg);
+  /* the .over highlight below comes and goes as the pointer crosses rows mid-drag — without a
+     transition the whole column strobes */
+  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.pair-event { display: flex; align-items: center; gap: var(--sp-3); }
+.pair-text { font-size: 14px; line-height: 20px; }
+/* Fixed width whether it holds a year or the em dash, so the event texts stay aligned down the
+   column while years are being swapped around; tabular-nums stops the digits jittering too. */
+.pair-slot {
+  flex: none; width: 62px; text-align: center;
+  padding: 5px 0; border-radius: var(--r-md);
+  background: var(--field); border: 1px dashed var(--line);
+  color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.pair-slot.set {
+  background: var(--ok-soft); border: 1px solid var(--ok-line);
+  color: var(--ok); font-weight: 600;
+}
+
+.pair-years { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.pair-year { padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+.pair-year:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+/* The year THIS row holds. Its hover is spelled out as well, otherwise the rule above (one
+   class heavier) would repaint the row's own chip blue the moment the pointer touched it. */
+.pair-year.on,
+.pair-year.on:hover:not(:disabled) {
+  background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); font-weight: 600;
+}
+/* Held by ANOTHER row: reads as spent, but is deliberately still enabled — clicking it is how
+   two events swap years, and a dead chip would leave a mis-click unfixable. */
+.pair-year.taken { background: var(--panel-3); border-color: var(--line); color: var(--muted); }
+.pair-year.taken:hover:not(:disabled) {
+  background: var(--surface-hi); border-color: var(--line-hi); color: var(--text);
+}
+/* Once the answer is in, every chip goes dead — but lighter than the page-wide .42, because the
+   pairing that was SENT is the evidence the tester came for and has to stay readable. */
+.pair-year:disabled { opacity: .6; }
+
+/* ─── the drag layer ───────────────────────────────────────────────────────────────
+   «Вільні роки»: the years nobody holds, and the drop target that UN-pairs. Dashed, like the
+   empty .pair-slot, so the two read as the same "nothing here yet" material. */
+.pair-pool {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-2); border: 1px dashed var(--line); border-radius: var(--r-lg);
+  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.pair-pool-label { color: var(--muted); font-size: 12px; margin-right: var(--sp-2); }
+/* The pool never disappears when it empties: it is still the place a paired year is dropped
+   to release it, and a target you cannot see is a target you cannot aim at. */
+.pair-pool-empty { color: var(--muted); font-size: 12px; }
+/* Pool chips are spans, not buttons (nothing to click there — see ChronoPairing), so they carry
+   the control fill themselves instead of inheriting it from the button rules. */
+.pair-year.free {
+  display: inline-block; line-height: 18px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text);
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.pair-year.free:not(.off):hover { border-color: var(--accent); background: var(--accent-soft); }
+/* The round is closed. `.pair-year:disabled` cannot reach a span, so the pool dims through a
+   class instead — otherwise the free chips stay bright and hoverable next to dead row chips. */
+.pair-year.free.off { opacity: .6; cursor: default; }
+
+/* A chip you can lift has to say so under the pointer, and a text selection started on one
+   would fight the drag. */
+.pair-year[draggable='true'],
+.pair-slot[draggable='true'] { cursor: grab; user-select: none; }
+.pair-year[draggable='true']:active,
+.pair-slot[draggable='true']:active { cursor: grabbing; }
+/* The chip in flight. The browser drags a ghost of it, so the original is faded rather than
+   hidden — a gap opening in the strip would re-flow every chip after it mid-drag. */
+.pair-year.dragging,
+.pair-slot.dragging { opacity: .35; }
+
+/* The target under the pointer. The inset ring rather than a thicker border, so nothing on the
+   row moves by a pixel when the highlight comes and goes. */
+.pair-row.over,
+.pair-pool.over {
+  border-color: var(--accent); border-style: solid;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+/* The submit sits under the rows and is sized by its label, not stretched across the grid. */
+.pair-submit { justify-self: start; margin-top: var(--sp-1); }
+
+.map { display: grid; gap: var(--sp-2); }
+
+/* These three are grid containers, so the gap is already the spacing — a paragraph's own margin
+   would stack on top of it and open a double gap under the instruction line. */
+:where(.map, .chrono, .options) > p { margin: 0; }
+
+.number { display: flex; gap: var(--sp-2); }
+/* Same box model as a button (18px line + 7px padding + 1px border) so the input and the
+   «Відповісти» next to it are exactly the same height. */
+.number input {
+  flex: 1; min-width: 0;
+  background: var(--field); border: 1px solid var(--line);
+  color: var(--text); font: inherit; font-size: 14px; line-height: 18px;
+  padding: var(--btn-y) 12px; border-radius: var(--r-md);
+}
+.number input:focus { border-color: var(--accent); }
+
+.answered { color: var(--muted); font-size: 12px; margin: var(--sp-3) 0 0; }
+
+.results table { width: 100%; border-collapse: collapse; }
+.results th, .results td {
+  text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top;
+}
+.results th {
+  color: var(--muted); font-weight: 500; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.results tr:last-child td { border-bottom: none; }
+.results tbody tr:hover td { background: rgba(255, 255, 255, .02); }
+.results tr.out { opacity: .45; }
+/* Answers are raw JSON with no spaces to break on. Without this one row widens the table, the
+   table widens the grid column, and the page grows a horizontal scrollbar. */
+.results td code { overflow-wrap: anywhere; }

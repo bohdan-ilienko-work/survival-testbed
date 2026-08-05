@@ -1,0 +1,54 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   base.css — the bare-element layer: box-sizing, <body>, <code>, ::selection, the
+   page-wide keyboard focus ring, and the thin scrollbar the scrolling wells share.
+
+   Its own file because these are the theme's ELEMENT rules (0,0,1) — the ones the modal
+   kit is deliberately class-based to outrank, whatever order the bundler emits the two
+   stylesheets in (see App.css). Everything else under ./styles/ matches classes, so a
+   reader who needs to know what a plain <p> or a plain <body> already looks like has
+   exactly one file to open. The `button` default is the one element rule that is NOT
+   here: it lives in buttons.css, further down the cascade, where it always was.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+::selection { background: rgba(91, 140, 255, .32); }
+
+/* Keyboard focus was invisible everywhere outside a dialog (this file styled no :focus
+   state at all), which made the whole page unusable without a mouse. :where() keeps the
+   rule at specificity 0 so any component that wants a different ring still wins — notably
+   ui.css's `.modal:focus { outline: none }` on the programmatically focused dialog box. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollable wells (roster, events, log) get a thin scrollbar that does not repaint a bright
+   OS-grey bar over a dark panel. Both syntaxes: Firefox understands the first, WebKit the second. */
+.events,
+.logs,
+.roster,
+.stage,
+aside { scrollbar-width: thin; scrollbar-color: #33405e transparent; }
+.events::-webkit-scrollbar,
+.logs::-webkit-scrollbar,
+.roster::-webkit-scrollbar { width: 9px; height: 9px; }
+.events::-webkit-scrollbar-thumb,
+.logs::-webkit-scrollbar-thumb,
+.roster::-webkit-scrollbar-thumb {
+  background: #33405e; border-radius: var(--r-pill); border: 2px solid transparent;
+  background-clip: content-box;
+}
+.events::-webkit-scrollbar-track,
+.logs::-webkit-scrollbar-track,
+.roster::-webkit-scrollbar-track { background: transparent; }

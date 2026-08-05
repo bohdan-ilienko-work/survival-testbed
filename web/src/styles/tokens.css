@@ -1,0 +1,70 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   tokens.css — every custom property the testbed has: the palette, the surfaces, the
+   tinted fills and the spacing / radius ladders.
+
+   A leaf file on purpose. It declares values and matches nothing but :root, so it can
+   be read by App.css's other parts, by ui.css and by characterEditor.css without any of
+   them being able to affect it. It is the first @import in App.css because that is
+   where the block sat in the single-file version, and because the one place a retune
+   happens should be the first thing anyone opening the theme sees.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── base palette (names are load-bearing — see note 1 above) ─── */
+  --bg: #0f1420;
+  --panel: #171d2b;
+  --line: #263049;
+  --text: #e6ebf5;
+  --muted: #8b97ad;
+  --accent: #5b8cff;
+  --ok: #3ecf8e;
+  --bad: #ff6b6b;
+  --warn: #ffb648;
+
+  /* ─── surfaces ───────────────────────────────────────────────────────────────
+     These were loose hex literals scattered through this file, and ui.css hard-codes
+     the very same values (it owns no tokens). Naming them once is what keeps a nested
+     box in a panel and a tile in a dialog the same colour after the next retune. */
+  --panel-2: #131a28;    /* a box nested inside a panel: roster, log wells, tiles */
+  --panel-3: #101726;    /* the quietest surface there is: table headers */
+  --field: #101728;      /* text inputs and the map canvas */
+  --surface: #232b3f;    /* control fill: buttons, pills, chips */
+  --surface-hi: #2c3653; /* the same control under the pointer */
+  --line-hi: #3a4767;    /* its border under the pointer */
+  --accent-hi: #7ba1ff;  /* primary button under the pointer */
+  --on-accent: #06102b;  /* ink ON --accent — the palette has no other light-on-blue */
+
+  /* ─── tinted fills ───────────────────────────────────────────────────────────
+     Spelled out instead of color-mix()ed on purpose: the same rgba() literals appear
+     in ui.css and characterEditor.css, and a computed near-miss would show up as two
+     slightly different greens sitting next to each other. */
+  --accent-soft: rgba(91, 140, 255, .12);
+  --accent-line: rgba(91, 140, 255, .4);
+  --ok-soft: rgba(62, 207, 142, .15);
+  --ok-line: rgba(62, 207, 142, .4);
+  --warn-soft: rgba(255, 182, 72, .12);
+  --warn-line: rgba(255, 182, 72, .4);
+  --bad-soft: rgba(255, 107, 107, .12);
+  --bad-line: rgba(255, 107, 107, .4);
+
+  /* ─── scale ──────────────────────────────────────────────────────────────────
+     One spacing ladder for the whole page. The old file picked 6/7/8/10/12/14/16/20
+     ad hoc, which is why nothing lined up vertically. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 28px;
+
+  /* Radii match ui.css's (8 / 10 / 14) so a dialog and a panel share a silhouette. */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --r-pill: 999px;
+
+  --btn-y: 7px; /* vertical padding — the one number that sets control height */
+
+  color-scheme: dark;
+}

@@ -1,0 +1,65 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   widgets.css — three small pieces that belong to no single panel, kept together
+   rather than as three ten-line files:
+
+     .flagbox / .charbox   the roster artwork boxes, shared by the aside .players list
+                           and the booking .roster so the two lists cannot drift apart
+     .raw                  the raw-state <details> dump under the stage
+     .leaflet-*            the container overrides for the map question's Leaflet view
+
+   Nothing here belongs to the file above or below it, and each of the three is a
+   handful of rules with a single owner. They appear in the order they were emitted in
+   before the split, which is the order they are kept in.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── roster artwork (FlagImg / CharacterImg) ─────────────────────────────────
+   One look for both player lists, because both render the same two components.
+   Every rule here is about the BOX, not the picture: each box keeps its size when the
+   image is missing, fails or is deliberately absent (a bot has no flag), so a 404 can
+   never re-flow a row or shift the column next to it. */
+.flagbox {
+  width: 20px; height: 14px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px; overflow: hidden;
+  /* an inset hairline instead of a border: it gives a white flag (Japan, Poland) an edge
+     without taking a pixel off the picture the way a real border would */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+}
+.flagbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.charbox {
+  width: 26px; height: 26px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--muted); font-size: 10px; font-style: normal;
+}
+.charbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The both-images-failed chip is an <i>, and the UA's `i { font-style: italic }` matches the
+   element directly, so it beats the value inherited from .charbox — reset it on the element. */
+.charbox i { font-style: normal; }
+
+/* ─── raw state dump ────────────────────────────────────────────────────────────── */
+
+.raw {
+  color: var(--muted);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 2px var(--sp-3);
+}
+.raw summary {
+  cursor: pointer; font-size: 12px; padding: var(--sp-2) 0;
+  border-radius: var(--r-sm); /* so the focus ring follows the corner, not a bare box */
+}
+.raw summary:hover { color: var(--text); }
+.raw[open] summary { color: var(--text); border-bottom: 1px solid var(--line); }
+.raw table { width: 100%; border-collapse: collapse; margin: var(--sp-2) 0 var(--sp-2); }
+.raw td { padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.raw tr:last-child td { border-bottom: none; }
+.raw td:first-child { color: var(--muted); width: 40%; }
+/* server ids and reason strings have no spaces to break on — see .results td code */
+.raw td:last-child { font-family: ui-monospace, Menlo, monospace; color: var(--text); overflow-wrap: anywhere; }
+
+/* ─── map ───────────────────────────────────────────────────────────────────────── */
+
+.leaflet-wrap { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line); }
+.leaflet-container { background: var(--field); }
+.leaflet-control-attribution { font-size: 9px; }

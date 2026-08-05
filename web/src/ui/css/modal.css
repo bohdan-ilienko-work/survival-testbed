@@ -1,0 +1,157 @@
+/* Modal shell — the dialog window itself: backdrop, frame, the head/body/foot bands, the
+   focus ring and the open animation. Its own file because every rule here exists for exactly
+   one component (Modal.tsx) and its portal, while everything else in the kit is furniture any
+   screen may reuse. */
+
+/* ─── modal shell ────────────────────────────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Leaflet raises its own panes and controls up to z-index 1000 and the map lives in
+     normal page flow (.panel is `position: relative` with z-index:auto, so it opens no
+     stacking context to contain it). Anything under 1000 would let the map's zoom
+     controls punch straight through the dialog. */
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 10, 18, .68);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: modal-fade .14s ease-out;
+}
+
+.modal {
+  --modal-w: 560px;
+  width: min(100%, var(--modal-w));
+  /* vh first as the fallback, then dvh: on mobile Safari the toolbar makes vh taller than
+     the visible viewport, which would hide the footer's actions under the browser chrome.
+     The calc() term is the backdrop's own 24px gutters — without it a very short window
+     (85dvh + 48px > 100dvh below ~320px tall) pushes the footer off the bottom edge, and a
+     flex-centred item that overflows gets clipped at the TOP, where the close button is. */
+  max-height: min(85vh, 860px);
+  max-height: min(85dvh, calc(100dvh - 48px), 860px);
+  display: flex;
+  flex-direction: column;
+  /* A flex item's min-height defaults to `auto`, i.e. "as tall as my content". Without this
+     the body would push the dialog past max-height instead of scrolling inside it, and the
+     footer would slide off the bottom of the screen. */
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+  /* Clips the header/footer edges to the corner radius; the body does its own scrolling. */
+  overflow: hidden;
+  animation: modal-rise .16s ease-out;
+}
+
+/* Width presets. They set a variable rather than `width` so a caller can still override
+   --modal-w inline for a one-off without fighting specificity. */
+.modal.sm { --modal-w: 400px; }
+.modal.md { --modal-w: 560px; }
+.modal.lg { --modal-w: 880px; }
+
+.modal-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px 18px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+/* The text column must be allowed to shrink, or a long unbroken title (an id, a URL)
+   would grow the flex row and shove the × button out past the dialog's edge. */
+.modal-head .txt { flex: 1; min-width: 0; }
+.modal-title { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.modal-sub { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+
+.modal-close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  border-radius: 8px;
+}
+.modal-close:hover:not(:disabled) { color: var(--text); }
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+  /* Wide content (tables, long code) must scroll inside its own .ui-scroll-x box. The
+     dialog itself never grows a horizontal bar, which would otherwise appear the moment
+     any child overflowed and would scroll the header out of alignment with the body. */
+  overflow-x: hidden;
+  /* Stops the wheel from chaining into the page once the body hits top or bottom. The body
+     scroll lock already freezes the page, but chaining also scrolls any other scrollable
+     ancestor the portal happens to sit in. */
+  overscroll-behavior: contain;
+}
+
+.modal-foot {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+/* Put this on a footer child that belongs on the LEFT (a status line, a "why disabled"
+   note) — everything after it stays pinned right. */
+.modal-foot .spread { margin-right: auto; }
+
+/* Focus is invisible in App.css (it styles no :focus state at all). Inside a dialog that is
+   not acceptable: the Tab trap means keyboard users cycle only these controls, so they have
+   to be able to see which one they are on. */
+.modal-backdrop :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The dialog box itself is focused programmatically on open so screen readers announce the
+   title. A ring around the whole window would read as a bug — and this rule must come after
+   the one above, since both are (0,2,0) and only order separates them. */
+.modal:focus,
+.modal:focus-visible { outline: none; }
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+/* Respect the OS setting: the rise is decoration, and for a user who asked for no motion an
+   abrupt appearance is the correct answer, not a slower one. */
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal { animation: none; }
+}
+
+/* On a phone the fixed 24px gutter costs a third of the width, and 85dvh leaves a strip of
+   dead page at both ends instead of room for content. */
+@media (max-width: 560px) {
+  .modal-backdrop { padding: 10px; }
+  .modal {
+    --modal-w: 100%;
+    max-height: 94vh;
+    max-height: min(94dvh, calc(100dvh - 20px));
+  }
+  .modal-head,
+  .modal-body,
+  .modal-foot { padding-left: 14px; padding-right: 14px; }
+}

@@ -1,0 +1,65 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   aside.css — the right-hand column: its captions, the list chrome all three lists
+   share, and the row shapes of the three (.players roster, .events feed, .logs).
+
+   One file because the three lists are one box with three row shapes; the rules that
+   keep them a single look (aside ul / aside li / the rule after the caption) have no
+   other consumer. The artwork boxes .players rows carry are NOT here — they are shared
+   with the booking roster and live in widgets.css. The lists' max-heights are re-tuned
+   for narrow windows in responsive.css, which stays imported last.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── aside ─────────────────────────────────────────────────────────────────────── */
+
+aside { display: grid; gap: var(--sp-2); align-content: start; min-width: 0; }
+/* The rule after the caption is what separates three stacked lists at a glance — they are
+   otherwise three identical dark boxes with a grey word on top. */
+aside h3 {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin: var(--sp-2) 0 var(--sp-1); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; color: var(--muted); letter-spacing: .08em;
+}
+aside h3::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+aside h3:first-child { margin-top: 0; }
+aside ul {
+  list-style: none; margin: 0; padding: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  /* clips the rows to the corner radius; the scrolling lists below re-declare it as auto */
+  overflow: hidden;
+}
+aside li {
+  padding: 6px 10px; border-bottom: 1px solid var(--line);
+  display: flex; gap: var(--sp-2); align-items: baseline; min-width: 0;
+}
+aside li:last-child { border-bottom: none; }
+/* an empty list must not read as a 1px-tall glitch */
+aside ul:empty { display: none; }
+
+/* Roster rows carry pictures now, so they line up on the middle rather than on the
+   text baseline — a baseline-aligned image hangs below its row. */
+.players li { align-items: center; }
+.players li.out { opacity: .4; }
+.players .nick { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.players .tail { display: flex; gap: var(--sp-1); align-items: center; flex: none; }
+.players .clan {
+  color: var(--accent); font-size: 11px; padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--accent-soft); max-width: 110px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.players .bot { color: var(--muted); font-size: 11px; }
+.players .ready { color: var(--ok); font-size: 12px; }
+.players em { color: var(--bad); font-size: 11px; font-style: normal; }
+
+.events { max-height: 300px; overflow: auto; }
+.events li { align-items: baseline; }
+.events b { color: var(--accent); font-size: 12px; flex: none; }
+.events .tgt { color: var(--muted); font-size: 10px; flex: none; }
+/* flex + min-width:0 is what lets the ellipsis actually happen: a flex item refuses to shrink
+   below its content width by default, so `overflow: hidden` alone never triggers. */
+.events code { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.logs { max-height: 220px; overflow: auto; }
+.logs li {
+  color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace;
+  overflow-wrap: anywhere;
+}

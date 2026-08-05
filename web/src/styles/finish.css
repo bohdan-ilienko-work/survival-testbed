@@ -1,0 +1,62 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   finish.css — how a round or a whole match ends: the .buyback offer, the .finish card
+   with the reward table it borrows from the booking roster, the .countdown, and the
+   .error.stale lost-connection banner.
+
+   These are one file because they are one moment — the player is out, and what he sees
+   next is an offer, a leaderboard or a dead socket. The finish rows restyle booking.css's
+   .roster classes rather than declaring their own, so the two files' relative import
+   order is load-bearing and is exactly the one the single-file version had: this one
+   first, booking.css after it.
+
+   NOTE, unchanged: the comment on `.roster li.win` says it beats `.roster li.me`
+   because it "sits later in the file". It sits EARLIER (App.css line 541 vs 718 before
+   the split) and the two selectors have equal specificity. The order is preserved
+   byte-for-byte here; this refactor reports that mismatch rather than fixing it.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+.buyback { border-color: var(--warn-line); }
+.buyback .offer {
+  display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: baseline;
+  color: var(--muted); font-size: 13px; margin-bottom: var(--sp-3);
+}
+.buyback .offer .attempt { color: var(--warn); font-weight: 600; }
+.buyback .offer .hot { color: var(--bad); font-weight: 600; }
+.buyback .row { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.buyback .deny { color: var(--bad); font-size: 13px; margin: var(--sp-3) 0 0; }
+.buyback .hint { font-size: 13px; margin: var(--sp-3) 0 0; }
+
+.finish { border-color: var(--ok-line); text-align: center; }
+.finish h2 { border-bottom-color: var(--ok-line); }
+.finish button { margin-top: var(--sp-3); }
+
+/* ─── 10. Фінал: таблиця нагород ─────────────────────────────────────────────
+   The endgame leaderboard reuses the booking roster's grid and artwork boxes
+   (.rosterbox / .roster / .flagbox / .charbox) on purpose: the pre-match list and
+   the final table show the same players and must keep one rhythm. Only what is
+   finish-specific lives here. */
+.finish .rosterbox { margin: var(--sp-4) 0 var(--sp-3); text-align: left; }
+/* the winner's row gets the me-row treatment in the ok tint; on the own winning row
+   this rule sits later in the file than .roster li.me, so the ok tint wins */
+.roster li.win { background: var(--ok-soft); }
+.roster li.win .nick { color: var(--ok); }
+/* a reconstructed rank must read as a guess, not as a server fact — see buildFinishRows */
+.roster .num.approx { font-style: italic; }
+/* the payout chips share the .clan chip's shape so the tail column keeps one height */
+.roster .reward {
+  font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 1px 7px; border-radius: var(--r-pill);
+}
+.roster .reward.gems { color: var(--accent); background: var(--accent-soft); }
+.roster .reward.tix { color: var(--warn); background: var(--warn-soft); }
+.finish .hint.small { font-size: 12px; }
+
+.countdown {
+  font-size: 28px; font-weight: 700; color: var(--ok); margin: var(--sp-1) 0 var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The lost-connection banner: the «Зайти заново» button is the point of it, so it is pinned to
+   the far end of the row and the text is allowed to take whatever is left. */
+.error.stale { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.error.stale button { margin-left: auto; }

@@ -1,0 +1,91 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   stage.css — the two-column page grid and the match column inside it: <main>, .stage's
+   vertical rhythm, the .stepbar, and the .panel box with the three things every panel
+   body has (.hint, .error, .badge).
+
+   The box and the column that spaces it are one idea and one file: panels come and go
+   with the step, so none of them carries a margin of its own and .stage's grid gap is
+   the entire vertical rhythm. The `:where(.panel) p` default declared here is what the
+   answer panels in question.css and the booking dialog are written to beat, so this
+   file has to keep its place in the import list — ahead of both.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── main grid ─────────────────────────────────────────────────────────────────── */
+
+/* minmax(0,1fr) and not 1fr: a grid track's automatic minimum is its content's, so one long
+   <code> in the log or one wide results table would widen the column and give the PAGE a
+   horizontal scrollbar instead of scrolling inside its own box. */
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: var(--sp-4);
+  align-items: start;
+}
+main > * { min-width: 0; }
+
+/* .stage owns the vertical rhythm of the whole match column, which is why nothing inside it
+   carries its own margin any more — panels come and go with the step, and stacked margins
+   left visible gaps where a panel used to be. */
+.stage {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  min-width: 0;
+}
+.stage > * { min-width: 0; }
+/* Same reasoning as :where(.panel) p — a bare <p className="hint"> sits directly on the stage
+   and must be spaced by the grid gap, not by the UA's 1em margins on top of it. */
+:where(.stage) > p { margin: 0; }
+
+.stepbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: 9px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+}
+.stepbar b { font-size: 14px; }
+.stepbar span { color: var(--muted); font-size: 13px; }
+.stepbar .mode {
+  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line);
+  padding: 1px 9px; border-radius: var(--r-pill); font-size: 11px;
+}
+/* tabular-nums so a two-digit → one-digit countdown does not shift the row it sits in */
+.stepbar .timer {
+  margin-left: auto; font-size: 20px; font-weight: 700; color: var(--ok);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.stepbar .timer.hot { color: var(--bad); }
+
+/* ─── panel ─────────────────────────────────────────────────────────────────────── */
+
+.panel {
+  position: relative;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-xl); padding: var(--sp-5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+}
+/* A hairline under the title is what makes it read as a HEADER rather than as the first
+   sentence of the panel — the old h2 was just slightly larger text. */
+.panel h2 {
+  margin: 0 0 var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  font-size: 15px; font-weight: 600; letter-spacing: -.005em;
+}
+/* :where() drops these to the specificity of a bare `p` (0,0,1) — deliberately. They are a
+   default, and every class that states its own rhythm (.answered, .hint, .until, .deny) has to
+   win against them without having to say `.panel` first. They still beat the UA's 1em margins,
+   because author rules outrank the UA sheet whatever their specificity. */
+:where(.panel) p { margin: 0 0 var(--sp-2); }
+:where(.panel) :where(p:last-child) { margin-bottom: 0; }
+
+.hint { color: var(--muted); }
+.error {
+  background: var(--bad-soft); border: 1px solid var(--bad-line);
+  color: var(--bad); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  overflow-wrap: anywhere;
+}
+.badge {
+  position: absolute; top: var(--sp-3); right: var(--sp-4);
+  background: var(--surface); color: var(--muted); font-size: 11px;
+  padding: 3px 10px; border-radius: var(--r-pill); border: 1px solid var(--line);
+}

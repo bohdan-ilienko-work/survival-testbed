@@ -1,0 +1,86 @@
+// Nothing off the wire is trusted: one guard per shape the state declares, each one degrading a
+// wrong / missing value into "the server did not say" instead of letting it reach a render.
+//
+// They live together because every comment below is the same lesson learned on a different field,
+// and because the composite guards (asYears, asRewards) are built out of the scalar ones.
+
+import type { LobbyPlayer, RewardRow } from './wire';
+
+/**
+ * Some events carry `players` as a COUNT (onboardingStarted) and others as a LIST
+ * (fightStarted). Blindly trusting the field once turned state.players into a number
+ * and crashed every render that called .filter on it.
+ */
+export const asPlayers = (value: unknown, fallback: LobbyPlayer[]): LobbyPlayer[] =>
+  Array.isArray(value) ? (value as LobbyPlayer[]) : fallback;
+
+/**
+ * Numeric twin of asPlayers, and for the same reason. The wallet numbers (cost,
+ * balance, attempt, closesAt) go straight into comparisons, arithmetic and the label
+ * on a button that spends tickets, so a string / null / missing value arriving where
+ * `number` is declared must never be stored as-is.
+ * `undefined` is deliberately kept as "not known" — it is not the same as 0.
+ */
+export const asNum = (value: unknown, fallback?: number): number | undefined => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  // JSON keeps numbers as numbers, but a payload built by hand can still send "4"
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+};
+
+/**
+ * The CHRONO year strip, guarded like every other array on the wire.
+ *
+ * All-or-nothing, deliberately: the answer addresses a year by its INDEX here, so dropping one
+ * bad element would shift every index after it and silently mis-pair the rest of the set. A
+ * missing / non-array / partly non-numeric value therefore degrades to `undefined` — "no years",
+ * which the round panel renders as a message instead of crashing on .map — never to a shorter
+ * array. Strings are accepted the same way asNum accepts them: JSON keeps numbers as numbers,
+ * but a payload built by hand can still send "1969".
+ */
+export const asYears = (value: unknown): number[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const years: number[] = [];
+  for (const raw of value) {
+    const year = asNum(raw);
+    if (year === undefined) return undefined;
+    years.push(year);
+  }
+  return years;
+};
+
+/** Only a real boolean is a verdict; anything else means "the server did not say". */
+export const asBool = (value: unknown, fallback?: boolean): boolean | undefined =>
+  typeof value === 'boolean' ? value : fallback;
+
+/** Machine reason tags are short non-empty strings; '' and non-strings are no tag. */
+export const asTag = (value: unknown): string | undefined => {
+  const tag = typeof value === 'string' ? value.trim() : '';
+  return tag === '' ? undefined : tag;
+};
+
+/**
+ * Read a `rewards` array off the wire, guarded like everything else: a missing or non-array
+ * value answers `undefined` ("сервер не сказав" — an OLD survival-server sends no rewards at
+ * all), never a crash. Rows are kept per-field: a row with a bad rank still shows its payout.
+ */
+export const asRewards = (value: unknown): RewardRow[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const rows: RewardRow[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    // no playerId → nobody to attribute the payout to, so the row is unrenderable
+    if (typeof r.playerId !== 'string' || r.playerId === '') continue;
+    rows.push({
+      playerId: r.playerId,
+      rank: asNum(r.rank),
+      gems: asNum(r.gems),
+      tickets: asNum(r.tickets),
+    });
+  }
+  return rows;
+};

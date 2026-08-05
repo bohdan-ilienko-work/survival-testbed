@@ -1,0 +1,60 @@
+/* Flag tab — the search row, and the wider 4:3 tiles the flag grid needs. Matches
+   FlagPicker.tsx.
+
+   It also carries the two `misc` rules from the tail of the original stylesheet (.ce-raw and
+   .ce-status, which belong to the modal chrome rather than to this tab): they are LAST in the
+   cascade, and hoisting them into ce-chrome.css would reorder a stylesheet this split is not
+   allowed to change. */
+
+/* ─── flag tab ─────────────────────────────────────────────────────────────── */
+
+.ce-searchrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.ce-searchrow .ui-field {
+  flex: 1;
+  min-width: 0;
+}
+.ce-searchrow .ui-sub {
+  flex: none;
+  padding-bottom: 9px;
+}
+
+/* Wider cells than the character grid: a code plus a country name needs the room, and 245 of
+   them are quicker to scan in fewer, longer rows. */
+.ce .ce-flags .ui-grid {
+  --ui-min: 112px;
+}
+/* Flags are not square. A 4:3 box wastes less height on letterboxing than the kit's 1:1 default,
+   which matters when the grid is 245 tiles tall. */
+.ce .ce-flags .ui-tile .art {
+  aspect-ratio: 4 / 3;
+}
+/* The CODE is what the server actually takes, so it is the loud line and the name is the quiet
+   one — the reverse of what the kit's single caption assumes. */
+.ce .ce-flags .ui-tile .ce-code {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ─── misc ─────────────────────────────────────────────────────────────────── */
+
+/* Raw server text: ids and error strings have no spaces to break on, and without this one of them
+   widens the whole dialog. */
+.ce-raw {
+  overflow-wrap: anywhere;
+}
+
+/* Lives in .modal-foot, OUTSIDE .ce, so it is prefixed instead of scoped. `.spread` (from ui.css)
+   pins it left; nowrap keeps a long busy label from wrapping the action buttons onto a second row. */
+.ce-status {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

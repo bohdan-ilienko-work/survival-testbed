@@ -1,0 +1,24 @@
+/* The adminApi grant box. Matches GrantRow.tsx. */
+
+/* ─── admin grants ─────────────────────────────────────────────────────────── */
+
+/* Framed in warn: nothing in this block is a real client RPC, and it must never be mistaken for
+   one while reading a test result. */
+.ce-grant {
+  border: 1px solid rgba(255, 182, 72, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 182, 72, 0.06);
+}
+.ce-grant .ui-h {
+  color: var(--warn);
+}
+.ce .ce-grant .ui-h span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+}
+.ce-grant button {
+  font-size: 12px;
+  padding: 6px 10px;
+}

@@ -1,0 +1,72 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   booking.css — the registration dialog body (.booking) and the .rosterbox / .roster
+   grid that lists the players signed up for the match.
+
+   The roster grid lives with the booking panel because that is the list it was built
+   for; finish.css only adds a tint, an italic rank and a reward chip on top of these
+   rules. That makes the import order matter — booking.css comes AFTER finish.css, as
+   the blocks did in the single-file version — so this file is where the roster's own
+   look is edited and finish.css is where the endgame's additions are.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── 1а. Реєстрація (beG.getSurvivalStatus) ─────────────────────────────────
+   Sits below the match panels and is always on screen: it is the main-menu booking
+   popup, which exists long before there is a step or a survival connection.
+   No margin of its own — .stage's grid gap spaces it, so it stays evenly placed
+   whichever match panels happen to be mounted above it. */
+/* The header, the "registered" pill, the fetch timestamp and the button row are NOT here any
+   more: the panel became a dialog, so the modal's own header carries the title and subtitle
+   and the modal's footer carries the buttons. Their rules used to sit right here and were
+   dead — no tsx file emits .booking .head / .reg / .fetched / .booking .row. */
+
+/* Paragraphs inside the dialog body: the old panel got its rhythm from `:where(.panel) p`,
+   and a modal body is not a .panel, so without this the hints and denials take the UA's
+   `1em 0` and stack a second gap on top of the body padding. */
+.booking.in-modal p { margin: 0 0 var(--sp-2); }
+.booking.in-modal > :last-child { margin-bottom: 0; }
+
+.booking .top { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.booking .count b { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.booking .count span { color: var(--muted); }
+.booking .meta {
+  display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-left: auto;
+  color: var(--muted); font-size: 13px;
+}
+.booking .meta b { color: var(--text); }
+.booking .until { color: var(--ok); font-weight: 600; margin: var(--sp-2) 0 var(--sp-3); }
+.booking .deny { color: var(--warn); }
+.booking .hint.small { font-size: 12px; }
+
+.rosterbox {
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--panel-2); overflow: hidden;
+}
+/* minmax(0,1fr) on the name column: a 1fr track's automatic minimum is its content, so a long
+   unbroken nickname would stretch the grid and defeat the ellipsis below. */
+.rosterbox .rhead, .roster li {
+  display: grid; grid-template-columns: 30px 26px 28px minmax(0, 1fr) auto;
+  gap: var(--sp-2); align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line);
+}
+.rosterbox .rhead {
+  color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  background: var(--panel-3);
+}
+/* the header cells share the row grid, so they need the same edge alignment */
+.rosterbox .rhead .num { text-align: right; }
+.rosterbox .rhead .tail { justify-self: end; }
+.roster { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+.roster li:last-child { border-bottom: none; }
+.roster li.me { background: rgba(91, 140, 255, .08); }
+.roster li.out { opacity: .45; }
+.roster .num { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+/* .flag / .ch used to be styled here; both cells are now .flagbox / .charbox, shared
+   with the aside roster, so the two lists cannot drift apart again. */
+.roster .nick { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster .tail { display: flex; gap: var(--sp-1); align-items: center; justify-self: end; }
+.roster .clan {
+  color: var(--accent); font-size: 12px; padding: 1px 8px; border-radius: var(--r-pill);
+  background: var(--accent-soft); max-width: 160px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.roster .bot { color: var(--muted); font-size: 11px; }
+.roster .mine { color: var(--accent); font-size: 11px; font-weight: 600; }
