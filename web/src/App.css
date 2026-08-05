@@ -376,19 +376,59 @@ main > * { min-width: 0; }
 /* ─── question panels ───────────────────────────────────────────────────────────── */
 
 .options { display: grid; gap: var(--sp-2); }
-/* Answer buttons are targets, not toolbar controls: full width, text left, taller. They keep
-   `text-align` (rather than becoming flex boxes) because JSX splits their label into two
-   adjacent text nodes and flex would eat the space between them. */
-.options button,
-.chrono button {
+/* Answer buttons are targets, not toolbar controls: full width, text left, taller. */
+.options button {
   width: 100%; text-align: left; padding: 12px 15px; font-size: 14px; line-height: 20px;
 }
-.options button:hover:not(:disabled),
-.chrono button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.options button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 
+/* ─── CHRONO: pairing an event with its year ───────────────────────────────────────
+   Not a list of answer buttons any more: one boxed row per event, its assigned year in the
+   slot on the left and the whole year strip as chips to click on the right. */
 .chrono { display: grid; gap: var(--sp-2); }
-/* an already-picked event stays readable — it is the ORDER being built, not a dead control */
-.chrono button:disabled { opacity: .55; }
+
+.pair-row {
+  display: grid; gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-lg);
+}
+.pair-event { display: flex; align-items: center; gap: var(--sp-3); }
+.pair-text { font-size: 14px; line-height: 20px; }
+/* Fixed width whether it holds a year or the em dash, so the event texts stay aligned down the
+   column while years are being swapped around; tabular-nums stops the digits jittering too. */
+.pair-slot {
+  flex: none; width: 62px; text-align: center;
+  padding: 5px 0; border-radius: var(--r-md);
+  background: var(--field); border: 1px dashed var(--line);
+  color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.pair-slot.set {
+  background: var(--ok-soft); border: 1px solid var(--ok-line);
+  color: var(--ok); font-weight: 600;
+}
+
+.pair-years { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.pair-year { padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+.pair-year:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+/* The year THIS row holds. Its hover is spelled out as well, otherwise the rule above (one
+   class heavier) would repaint the row's own chip blue the moment the pointer touched it. */
+.pair-year.on,
+.pair-year.on:hover:not(:disabled) {
+  background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); font-weight: 600;
+}
+/* Held by ANOTHER row: reads as spent, but is deliberately still enabled — clicking it is how
+   two events swap years, and a dead chip would leave a mis-click unfixable. */
+.pair-year.taken { background: var(--panel-3); border-color: var(--line); color: var(--muted); }
+.pair-year.taken:hover:not(:disabled) {
+  background: var(--surface-hi); border-color: var(--line-hi); color: var(--text);
+}
+/* Once the answer is in, every chip goes dead — but lighter than the page-wide .42, because the
+   pairing that was SENT is the evidence the tester came for and has to stay readable. */
+.pair-year:disabled { opacity: .6; }
+
+/* The submit sits under the rows and is sized by its label, not stretched across the grid. */
+.pair-submit { justify-self: start; margin-top: var(--sp-1); }
 
 .map { display: grid; gap: var(--sp-2); }
 

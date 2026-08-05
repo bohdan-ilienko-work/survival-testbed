@@ -1624,12 +1624,18 @@ function QuestionView({
 }) {
   const q = state.question!;
   const [num, setNum] = useState('');
-  const [order, setOrder] = useState<number[]>([]);
+  /**
+   * CHRONO is a MATCHING round: pairs[i] = index into q.years for events[i], -1 = not paired.
+   * Kept here rather than inside ChronoPairing so it is cleared by the same effect as every
+   * other draft answer — a pairing left over from the previous round would be submitted
+   * against a completely different set of facts.
+   */
+  const [pairs, setPairs] = useState<number[]>([]);
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     setNum('');
-    setOrder([]);
+    setPairs([]);
     setPin(null);
   }, [q.id, state.round]);
 
@@ -1674,23 +1680,14 @@ function QuestionView({
       )}
 
       {q.mode === 'CHRONO' && (
-        <div className="chrono">
-          <p className="hint">Клікай події в хронологічному порядку — від найранішої.</p>
-          {(q.events ?? []).map((ev) => (
-            <button
-              key={ev.id}
-              disabled={disabled || order.includes(ev.id)}
-              onClick={() => {
-                const next = [...order, ev.id];
-                setOrder(next);
-                if (next.length === (q.events ?? []).length) onAnswer({ type: 'chrono', order: next });
-              }}
-            >
-              {order.includes(ev.id) ? `${order.indexOf(ev.id) + 1}. ` : ''}
-              {ev.text}
-            </button>
-          ))}
-        </div>
+        <ChronoPairing
+          events={q.events ?? []}
+          years={q.years ?? []}
+          pairs={pairs}
+          disabled={disabled}
+          onPairs={setPairs}
+          onAnswer={onAnswer}
+        />
       )}
 
       {q.mode === 'NUMBER' && (
@@ -1712,6 +1709,139 @@ function QuestionView({
       )}
 
       <p className="answered">відповіли: {state.answeredCount}</p>
+    </div>
+  );
+}
+
+/** A fact can be a whole sentence; a tooltip that quotes one has to stay one line. */
+const clip = (text: string, max = 48) =>
+  text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+
+/**
+ * CHRONO — the MATCHING round: pair every event with the year it happened.
+ *
+ * The wire is `{ type: 'chrono', pairs }`, where pairs[i] is the index into `years` chosen for
+ * events[i] and -1 means "not paired". The server validates that (fight-server facts.ts,
+ * isValidFactsAnswer): same length as the events, every value in [-1, years.length), and NO
+ * duplicate non-(-1) value — one year belongs to exactly one event. So the UI is built so a
+ * duplicate cannot even be expressed:
+ *
+ *  - clicking a year another event already holds SWAPS the two rows (that other event takes
+ *    whatever this one held, possibly nothing). A steal would silently unpair a row further up
+ *    the list, and refusing the click would force clear-then-assign for what is nearly always
+ *    meant as "these two are the wrong way round";
+ *  - clicking the row's own year un-pairs it, because -1 is a legal value and a testbed has to
+ *    be able to send it.
+ */
+function ChronoPairing({
+  events,
+  years,
+  pairs,
+  disabled,
+  onPairs,
+  onAnswer,
+}: {
+  events: { id: number; text: string }[];
+  years: number[];
+  pairs: number[];
+  disabled: boolean;
+  onPairs: (pairs: number[]) => void;
+  onAnswer: (a: unknown) => void;
+}) {
+  // The draft starts as [] (that is also what a new round resets it to), so a missing slot reads
+  // as "not paired yet" instead of undefined leaking into the answer.
+  const yearOf = (i: number) => pairs[i] ?? -1;
+  /** which event currently holds year `yi`, -1 = nobody */
+  const holderOf = (yi: number) => events.findIndex((_, i) => yearOf(i) === yi);
+
+  const assign = (i: number, yi: number) => {
+    // Rebuilt at full length every time: the answer must be exactly as long as the event list,
+    // whatever the draft happened to be sparse at.
+    const next = events.map((_, k) => yearOf(k));
+    const held = next[i];
+    if (held === yi) {
+      next[i] = -1;
+      onPairs(next);
+      return;
+    }
+    const other = next.findIndex((v, k) => k !== i && v === yi);
+    if (other >= 0) next[other] = held;
+    next[i] = yi;
+    onPairs(next);
+  };
+
+  // `years` missing — an older server, or a value the wire guard refused — is not a crash: the
+  // events still render so the tester sees what DID arrive, there is just nothing to pair with.
+  const noYears = years.length === 0;
+  const paired = events.reduce((n, _, i) => (yearOf(i) === -1 ? n : n + 1), 0);
+
+  return (
+    <div className="chrono">
+      <p className="hint">
+        {noYears
+          ? 'Сервер не надіслав масив years — пару скласти нема з чого.'
+          : 'Признач кожній події її рік. Один рік — тільки для однієї події: клік по зайнятому' +
+            ' року міняє події місцями, клік по власному — знімає пару.'}
+      </p>
+
+      {events.map((ev, i) => {
+        const mine = yearOf(i);
+        return (
+          <div className="pair-row" key={ev.id}>
+            <div className="pair-event">
+              <span className={mine === -1 ? 'pair-slot' : 'pair-slot set'}>
+                {mine === -1 ? '—' : years[mine]}
+              </span>
+              <span className="pair-text">{ev.text}</span>
+            </div>
+            {!noYears && (
+              <div className="pair-years">
+                {years.map((year, yi) => {
+                  const holder = holderOf(yi);
+                  const isMine = holder === i;
+                  return (
+                    <button
+                      key={yi}
+                      className={`pair-year${isMine ? ' on' : holder >= 0 ? ' taken' : ''}`}
+                      // Only the round being closed kills a chip. A chip taken by another event
+                      // stays clickable ON PURPOSE — that click IS the swap.
+                      disabled={disabled}
+                      // The rows carry no visible numbers, so a taken chip names the event
+                      // holding it by its TEXT — «зайнятий подією 2» would be unresolvable.
+                      title={
+                        isMine
+                          ? 'зняти пару'
+                          : holder >= 0
+                            ? `зайнятий: «${clip(events[holder].text)}» — клік поміняє їх місцями`
+                            : undefined
+                      }
+                      onClick={() => assign(i, yi)}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* An EXPLICIT submit, unlike the sequence UI this replaced (which fired the moment every
+          event had been clicked). A pairing stays editable to the last second — one click can
+          swap two rows — so the first instant every slot happens to be full is not the instant
+          the tester means to send, and the server takes one answer per round. Left enabled while
+          the pairing is incomplete because -1 is a legal value and that path needs testing too. */}
+      <button
+        className="primary pair-submit"
+        disabled={disabled || noYears}
+        onClick={() => onAnswer({ type: 'chrono', pairs: events.map((_, i) => yearOf(i)) })}
+      >
+        Відповісти — {paired} з {events.length}
+      </button>
+      {!noYears && paired < events.length && (
+        <p className="hint">Непаровані події підуть як -1 — сервер таку відповідь приймає.</p>
+      )}
     </div>
   );
 }

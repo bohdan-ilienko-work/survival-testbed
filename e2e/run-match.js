@@ -95,9 +95,21 @@ function answerFor(question, mode, wantCorrect) {
     return { type: 'map', lat, lng };
   }
   if (m === 'CHRONO') {
-    const ids = (question.facts || []).map((f) => f.id);
-    if (!wantCorrect) ids.reverse();
-    return { type: 'chrono', order: ids };
+    // CHRONO is a MATCHING round: pairs[i] is the index into `years` chosen for events[i].
+    // (It also used to read `question.facts`, a field the wire never carried — the payload
+    // field is `events`.) The harness cannot know the true pairing, so "correct" here just
+    // means a WELL-FORMED answer: isChronoAnswer rejects duplicate indices and a wrong length
+    // outright, and an ill-formed answer scores 0 without proving anything about the round.
+    const events = question.events || [];
+    const yearCount = (question.years || []).length;
+    const pairs = events.map((_, i) => (i < yearCount ? i : -1));
+    // A rotation keeps every index distinct — still a legal answer, just a different one
+    if (!wantCorrect && yearCount > 1) {
+      for (let i = 0; i < pairs.length; i++) {
+        if (pairs[i] !== -1) pairs[i] = (pairs[i] + 1) % yearCount;
+      }
+    }
+    return { type: 'chrono', pairs };
   }
   if (m === 'NUMBER') {
     return { type: 'number', value: wantCorrect ? 1000 : Math.floor(Math.random() * 1e6) };

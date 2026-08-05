@@ -68,6 +68,27 @@ const asNum = (value: unknown, fallback?: number): number | undefined => {
   return fallback;
 };
 
+/**
+ * The CHRONO year strip, guarded like every other array on the wire.
+ *
+ * All-or-nothing, deliberately: the answer addresses a year by its INDEX here, so dropping one
+ * bad element would shift every index after it and silently mis-pair the rest of the set. A
+ * missing / non-array / partly non-numeric value therefore degrades to `undefined` — "no years",
+ * which the round panel renders as a message instead of crashing on .map — never to a shorter
+ * array. Strings are accepted the same way asNum accepts them: JSON keeps numbers as numbers,
+ * but a payload built by hand can still send "1969".
+ */
+const asYears = (value: unknown): number[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const years: number[] = [];
+  for (const raw of value) {
+    const year = asNum(raw);
+    if (year === undefined) return undefined;
+    years.push(year);
+  }
+  return years;
+};
+
 /** Only a real boolean is a verdict; anything else means "the server did not say". */
 const asBool = (value: unknown, fallback?: boolean): boolean | undefined =>
   typeof value === 'boolean' ? value : fallback;
@@ -85,6 +106,12 @@ export interface Question {
   /** server sends objects, not plain strings — see SelectionOption in scoring.ts */
   options?: { id: number; text: string }[];
   events?: { id: number; text: string }[];
+  /**
+   * CHRONO only: the set's years, SHUFFLED as the server shows them. CHRONO is a MATCHING
+   * round — the answer pairs events[i] with a year BY INDEX into this array — so the array
+   * itself is the address space of the answer and never gets reordered on the client.
+   */
+  years?: number[];
   imageUrl?: string;
   deadline?: number;
 }
@@ -545,7 +572,14 @@ export function reduce(state: SurvivalState, ev: ServerEvent, myPlayerId?: strin
         step: state.iAmEliminated ? 'spectator' : 'question',
         round: p.round ?? state.round,
         mode: p.mode,
-        question: { ...(p.question ?? {}), mode: p.mode, deadline: p.deadline },
+        // `years` is re-read through the guard rather than trusted from the spread: the CHRONO
+        // panel maps over it, and a string / object / missing array would throw inside a render
+        question: {
+          ...(p.question ?? {}),
+          mode: p.mode,
+          years: asYears(p.question?.years),
+          deadline: p.deadline,
+        },
         deadline: p.deadline,
         myAnswer: undefined,
         answeredCount: 0,
