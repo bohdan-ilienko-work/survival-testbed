@@ -59,9 +59,19 @@ export function FlagImg({ flag }: { flag?: unknown }) {
   // ever reaching its empty state.
   const chain = primary ? (primary === unknownFlagUrl ? [primary] : [primary, unknownFlagUrl]) : [];
   const [src, onError] = useImageChain(chain);
+  // An empty box reads as a flag that FAILED to load, which is the one thing it is not. A bot
+  // simply has no country, so the slot says so with a glyph — it keeps the column aligned and
+  // stops five bot rows looking like five broken images.
+  if (!src) {
+    return (
+      <span className="flagbox none" title={raw === '' ? 'бот — країни немає' : `${raw}: прапор не завантажився`}>
+        {raw === '' ? '🤖' : '?'}
+      </span>
+    );
+  }
   return (
-    <span className="flagbox" title={raw === '' ? 'бот — прапора немає' : raw}>
-      {src && <img src={src} alt={raw} onError={onError} loading="lazy" />}
+    <span className="flagbox" title={raw}>
+      <img src={src} alt={raw} onError={onError} loading="lazy" />
     </span>
   );
 }

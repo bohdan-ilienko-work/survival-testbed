@@ -1,7 +1,7 @@
 // ─── 10. Фінал: підсумкова таблиця з нагородами ───────────────────────────────
 // The drawing only — how the ranks in it are arrived at is buildFinishRows' business.
 
-import type { SurvivalState } from '../survival';
+import type { RankReward, SurvivalState } from '../survival';
 import { buildFinishRows, type FinishRow } from './finishRows';
 import { CharacterImg, FlagImg } from './PlayerArt';
 
@@ -61,6 +61,7 @@ export function FinishView({
                 // index keeps the key unique even if the server ever repeats a playerId
                 key={`${index}:${row.playerId}`}
                 row={row}
+                table={state.rewardTable}
                 mine={!!me && row.playerId === me}
                 win={!!state.winnerId && row.playerId === state.winnerId}
               />
@@ -84,12 +85,36 @@ export function FinishView({
   );
 }
 
-/** One endgame row. Zero reward parts are omitted; a row with neither is an unpaid rank. */
-function FinishRowView({ row, mine, win }: { row: FinishRow; mine: boolean; win: boolean }) {
-  // bots are never paid — a bot row carrying money is a server bug, and the raw event log on
-  // the right is where that evidence belongs, not a leaderboard cell that legitimises it
-  const gems = !row.isBot && row.gems > 0 ? row.gems : 0;
-  const tickets = !row.isBot && row.tickets > 0 ? row.tickets : 0;
+/**
+ * One endgame row.
+ *
+ * Two different numbers can appear here and they must never be confused:
+ *  - what the player was PAID (`row.gems` / `row.tickets`, straight off the payout rows);
+ *  - what the RANK is worth (`table[rank - 1]`), which exists for every place, bots included.
+ * A bot occupies a rank and is never paid, so its row shows the rank's value dimmed — the
+ * information is real, the payment is not, and the two are drawn differently on purpose.
+ */
+function FinishRowView({
+  row,
+  table,
+  mine,
+  win,
+}: {
+  row: FinishRow;
+  table?: RankReward[];
+  mine: boolean;
+  win: boolean;
+}) {
+  // Bots are never paid: a bot row carrying an actual payout is a server bug, and the raw event
+  // log on the right is where that evidence belongs, not a cell that legitimises it.
+  const paidGems = !row.isBot && row.gems > 0 ? row.gems : 0;
+  const paidTickets = !row.isBot && row.tickets > 0 ? row.tickets : 0;
+  // The rank's value, shown only when nothing was actually paid — otherwise the row would carry
+  // the same number twice. `undefined` table = an older server that sends no table at all.
+  const worth = row.rank !== undefined ? table?.[row.rank - 1] : undefined;
+  const showWorth = paidGems === 0 && paidTickets === 0 && worth
+    ? { gems: worth.gems, tickets: worth.tickets }
+    : null;
   return (
     <li className={`${mine ? 'me' : ''} ${win ? 'win' : ''}`}>
       <span
@@ -112,8 +137,22 @@ function FinishRowView({ row, mine, win }: { row: FinishRow; mine: boolean; win:
       <span className="tail">
         {row.isBot && <span className="bot">бот</span>}
         {mine && <span className="mine">я</span>}
-        {gems > 0 && <span className="reward gems">💎 {gems}</span>}
-        {tickets > 0 && <span className="reward tix">🎟 {tickets}</span>}
+        {paidGems > 0 && <span className="reward gems">💎 {paidGems}</span>}
+        {paidTickets > 0 && <span className="reward tix">🎟 {paidTickets}</span>}
+        {showWorth && (showWorth.gems > 0 || showWorth.tickets > 0) && (
+          <span
+            className="reward worth"
+            title={
+              row.isBot
+                ? 'скільки коштує це місце — боту не виплачується'
+                : 'скільки коштує це місце — сервер виплати не надсилав'
+            }
+          >
+            {showWorth.gems > 0 && `💎 ${showWorth.gems}`}
+            {showWorth.gems > 0 && showWorth.tickets > 0 && ' '}
+            {showWorth.tickets > 0 && `🎟 ${showWorth.tickets}`}
+          </span>
+        )}
       </span>
     </li>
   );

@@ -5,7 +5,7 @@
 // rounds happen in — and because none of them is addressed to a single player, so this is the
 // only reducer file that never needs to know who "I" am.
 
-import { asNum, asPlayers, asRewards } from './guards';
+import { asNum, asPlayers, asRewardTable, asRewards } from './guards';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
@@ -55,6 +55,7 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         // a new fight starts with no payouts: without this, a finish payload that arrives
         // without rewards would let the PREVIOUS match's table resurface under the new final
         rewards: undefined,
+        rewardTable: undefined,
       };
 
     case 'playerKickedAfterDisconnect':
@@ -77,6 +78,7 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         // the payouts may ride inside this payload or arrive as their own 'lobbyRewards'
         // event, in either order — so a finish without them must keep what already came
         rewards: asRewards(p.rewards) ?? state.rewards,
+        rewardTable: asRewardTable(p.rewardTable) ?? state.rewardTable,
       };
 
     // The stand-alone shape of the payout report — see the note on state.rewards. It may land
@@ -84,7 +86,11 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
     case 'lobbyRewards': {
       // a testbed tab lives across matches; a stale report for another lobby is not this one's
       if (p.lobbyId && state.lobbyId && p.lobbyId !== state.lobbyId) return state;
-      return { ...state, rewards: asRewards(p.rewards) ?? state.rewards };
+      return {
+        ...state,
+        rewards: asRewards(p.rewards) ?? state.rewards,
+        rewardTable: asRewardTable(p.rewardTable) ?? state.rewardTable,
+      };
     }
 
     case 'lobbyCancelled':

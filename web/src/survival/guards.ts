@@ -4,7 +4,7 @@
 // They live together because every comment below is the same lesson learned on a different field,
 // and because the composite guards (asYears, asRewards) are built out of the scalar ones.
 
-import type { LobbyPlayer, RewardRow } from './wire';
+import type { LobbyPlayer, RankReward, RewardRow } from './wire';
 
 /**
  * Some events carry `players` as a COUNT (onboardingStarted) and others as a LIST
@@ -60,6 +60,22 @@ export const asBool = (value: unknown, fallback?: boolean): boolean | undefined 
 export const asTag = (value: unknown): string | undefined => {
   const tag = typeof value === 'string' ? value.trim() : '';
   return tag === '' ? undefined : tag;
+};
+
+/**
+ * Read the `rewardTable` — what each RANK pays, index 0 = rank 1. It is the day's set config,
+ * public information, and it is what lets the endgame board label a rank nobody was paid for
+ * (every bot's, and every human below the paid places). `undefined` for a missing table keeps
+ * "старий сервер" distinguishable from "таблиця порожня".
+ */
+export const asRewardTable = (value: unknown): RankReward[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  return value.map((raw) => {
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    // A rank that pays nothing is a real row: it still occupies a place in the table, and
+    // dropping it would shift every rank below it up by one.
+    return { gems: asNum(r.gems) ?? 0, tickets: asNum(r.tickets) ?? 0 };
+  });
 };
 
 /**

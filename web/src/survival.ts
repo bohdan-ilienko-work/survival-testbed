@@ -12,7 +12,14 @@
 //   booking.ts  — the RPC replies the booking screen polls
 //   reduce.ts   — the event dispatcher, split by family into reduceLobby / Round / Buyback
 
-export type { LobbyPlayer, Question, RewardRow, RoundMode, Score } from './survival/wire';
+export type {
+  LobbyPlayer,
+  Question,
+  RankReward,
+  RewardRow,
+  RoundMode,
+  Score,
+} from './survival/wire';
 export type { Step, SurvivalState } from './survival/state';
 export { initialState, stepLabel } from './survival/state';
 export { errorText, reasonText, reasonWithTag } from './survival/reasons';

@@ -49,6 +49,13 @@
 }
 .roster .reward.gems { color: var(--accent); background: var(--accent-soft); }
 .roster .reward.tix { color: var(--warn); background: var(--warn-soft); }
+/* What the PLACE is worth, not what anybody was paid — a bot's rank, or a rank the server sent
+   no payout for. Muted and outlined rather than filled, so it can never be mistaken at a glance
+   for the solid chips above it, which do mean money changed hands. */
+.roster .reward.worth {
+  color: var(--muted); background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
 .finish .hint.small { font-size: 12px; }
 
 .countdown {

@@ -69,3 +69,16 @@ export interface RewardRow {
   gems?: number;
   tickets?: number;
 }
+
+/**
+ * What one RANK pays, as the day's set configured it — index 0 is rank 1.
+ *
+ * Deliberately NOT the same thing as RewardRow. The table describes places, so it can label a
+ * bot's rank too; a RewardRow describes a player and carries only the humans main-server
+ * actually bills for. Showing the table beside a bot is information; showing it a RewardRow
+ * would be a claim that money moved.
+ */
+export interface RankReward {
+  gems: number;
+  tickets: number;
+}

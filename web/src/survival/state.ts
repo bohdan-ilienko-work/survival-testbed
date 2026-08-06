@@ -4,7 +4,7 @@
 // Kept apart from the reducer so that a module which only needs to NAME the state (a component,
 // a guard, the wallet helpers) never has to pull the event handling in behind it.
 
-import type { LobbyPlayer, Question, RewardRow, RoundMode, Score } from './wire';
+import type { LobbyPlayer, Question, RankReward, RewardRow, RoundMode, Score } from './wire';
 
 /** Flowchart steps, used only to label what the UI is showing. */
 export type Step =
@@ -74,6 +74,12 @@ export interface SurvivalState {
    * event — and their order is not guaranteed, so neither write may blank the other's data.
    */
   rewards?: RewardRow[];
+  /**
+   * What each RANK pays (index 0 = rank 1), as the day's set configured it. Separate from
+   * `rewards` on purpose: this labels PLACES, so the board can show what a bot's rank was
+   * worth, while `rewards` stays the humans-only list of payouts that actually happened.
+   */
+  rewardTable?: RankReward[];
   lastError?: string;
 }
 
