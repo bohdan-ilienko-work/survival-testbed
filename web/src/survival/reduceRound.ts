@@ -5,7 +5,7 @@
 // clears the same set of per-round fields (question, deadline, myAnswer, scores, eliminated),
 // which is exactly what makes `roundStarted` the event that separates two BuyBack windows.
 
-import { asYears } from './guards';
+import { asMiss, asYears } from './guards';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
@@ -38,6 +38,8 @@ export function reduceRound(
         answeredCount: 0,
         scores: [],
         correctAnswer: undefined,
+        // the previous round's survival threshold would mis-explain this round's eliminations
+        roundDelta: undefined,
         eliminated: [],
         buybackOpen: false,
       };
@@ -53,6 +55,8 @@ export function reduceRound(
         step: 'results',
         scores: p.scores ?? [],
         correctAnswer: p.correctAnswer,
+        // MAP / NUMBER only, and only when the server named a finite one
+        roundDelta: asMiss(p.roundDelta),
         eliminated,
         iAmEliminated: state.iAmEliminated || iAmOut,
       };

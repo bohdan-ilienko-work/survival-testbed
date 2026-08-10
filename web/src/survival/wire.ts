@@ -55,6 +55,13 @@ export interface Score {
   correct: boolean;
   rank: number;
   answer?: unknown;
+  /**
+   * MAP / NUMBER only: how far this answer missed, in the question's own unit (kilometres for
+   * MAP). It is what elimination is decided on there — `score` is a display figure — so this is
+   * the number that has to sit next to the ✓/✗ for a result to be readable. A player who did not
+   * answer holds `Infinity` on the server, which JSON ships as `null`.
+   */
+  err?: number;
 }
 
 /**

@@ -52,6 +52,18 @@ export const asYears = (value: unknown): number[] | undefined => {
   return years;
 };
 
+/**
+ * A miss or a tolerance in the question's own unit (kilometres on MAP). Never negative, and
+ * never infinite: a player who did not answer holds `Infinity` server-side, which JSON ships as
+ * `null`, and a round whose cut landed on such a player has no threshold worth naming. Both
+ * degrade to `undefined`, which the results screen shows as «—» rather than printing a
+ * tolerance that would explain the round's eliminations wrongly.
+ */
+export const asMiss = (value: unknown): number | undefined => {
+  const miss = asNum(value);
+  return miss === undefined || miss < 0 ? undefined : miss;
+};
+
 /** Only a real boolean is a verdict; anything else means "the server did not say". */
 export const asBool = (value: unknown, fallback?: boolean): boolean | undefined =>
   typeof value === 'boolean' ? value : fallback;

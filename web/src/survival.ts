@@ -22,6 +22,9 @@ export type {
 } from './survival/wire';
 export type { Step, SurvivalState } from './survival/state';
 export { initialState, stepLabel } from './survival/state';
+// the one guard a component needs of its own: the results table reads each player's miss
+// straight off the score line, which is as untrusted as anything else off the wire
+export { asMiss } from './survival/guards';
 export { errorText, reasonText, reasonWithTag } from './survival/reasons';
 export { applyBuyBackQuote, applyTicketBalance } from './survival/wallet';
 export type { BookingLobby, BookingStatus } from './survival/booking';

@@ -40,6 +40,14 @@ export interface SurvivalState {
   answeredCount: number;
   scores: Score[];
   correctAnswer?: unknown;
+  /**
+   * MAP / NUMBER only: the miss the round tolerated — everyone off by at most this much stayed
+   * in. The server derives it from the field each round (it keeps 70% of the cohort, and the
+   * last player kept sets the number), so it belongs to ONE round and has to be cleared when the
+   * next one starts: left standing, it would explain the new round's eliminations with the old
+   * round's threshold. `undefined` = the server did not name one.
+   */
+  roundDelta?: number;
   eliminated: string[];
   iAmEliminated: boolean;
   buybackOpen: boolean;
