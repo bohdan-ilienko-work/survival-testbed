@@ -50,6 +50,16 @@ export function ClientStateTable({
             </td>
           </tr>
           <tr>
+            <td>пауза між раундами</td>
+            <td>
+              {/* raw epoch ms on purpose: under C1 a buyback round's nextRoundAt EQUALS the
+                  window's closesAt — two identical numbers side by side IS the check, and a
+                  formatted time would round the difference away */}
+              nextRoundAt: {state.nextRoundAt ?? '—'} · buyback closesAt:{' '}
+              {state.buybackClosesAt ?? '—'}
+            </td>
+          </tr>
+          <tr>
             <td>нагороди (фінал)</td>
             <td>
               {state.rewards === undefined

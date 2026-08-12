@@ -5,7 +5,7 @@
 // clears the same set of per-round fields (question, deadline, myAnswer, scores, eliminated),
 // which is exactly what makes `roundStarted` the event that separates two BuyBack windows.
 
-import { asMiss, asYears } from './guards';
+import { asMiss, asNum, asYears } from './guards';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
@@ -34,6 +34,8 @@ export function reduceRound(
           deadline: p.deadline,
         },
         deadline: p.deadline,
+        // the pause this instant measured is over — the round it announced is the one starting
+        nextRoundAt: undefined,
         myAnswer: undefined,
         answeredCount: 0,
         scores: [],
@@ -57,6 +59,14 @@ export function reduceRound(
         correctAnswer: p.correctAnswer,
         // MAP / NUMBER only, and only when the server named a finite one
         roundDelta: asMiss(p.roundDelta),
+        // the answer deadline belongs to the round that just ended — left in place it sat as
+        // a red «0 с» timer beside the live pause countdown for the whole between-rounds gap
+        deadline: undefined,
+        // ABSOLUTE instant of the next roundStarted (C1). On a round that opens a BuyBack
+        // window it equals that window's closesAt — the window IS the pause — and on a round
+        // that opens none (≤1 active left, round cap, gate unpassable) it is the only
+        // countdown the pause has, so it must not depend on any buyback event arriving.
+        nextRoundAt: asNum(p.nextRoundAt),
         eliminated,
         iAmEliminated: state.iAmEliminated || iAmOut,
       };
@@ -69,6 +79,9 @@ export function reduceRound(
         mode: 'NUMBER',
         question: { ...(p.question ?? {}), mode: 'NUMBER', deadline: p.question?.deadline },
         deadline: p.question?.deadline,
+        // a tiebreak interrupts the pause — its question must not share the screen with a
+        // «наступний раунд» countdown that no longer holds
+        nextRoundAt: undefined,
         myAnswer: undefined,
       };
 

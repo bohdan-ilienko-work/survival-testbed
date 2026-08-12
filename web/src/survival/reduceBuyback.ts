@@ -27,6 +27,11 @@ export function reduceBuyback(
         ...state,
         step: state.iAmEliminated ? 'buyback' : state.step,
         buybackOpen: true,
+        // FALLBACK only, never an override: the private offer stays the authority on this
+        // instant (see 'buyBackOffer' below). But players who get no offer at all — everyone
+        // still alive, watching the window — had no countdown without the broadcast's copy,
+        // which under C1 is the same single instant as roundResult.nextRoundAt.
+        buybackClosesAt: state.buybackClosesAt ?? asNum(p.closesAt),
       };
 
     case 'buybackWindowClosed':
@@ -84,9 +89,13 @@ export function reduceBuyback(
     // addressed to anybody else must not be rendered as mine.
     case 'buyBackOffer': {
       if (myPlayerId && p.playerId && p.playerId !== myPlayerId) return state;
+      const offer = readOffer(p, state.tickets);
       return {
         ...state,
-        ...readOffer(p, state.tickets),
+        ...offer,
+        // the offer is the authority when it names the closing instant; when it does not, an
+        // offer landing after the broadcast must not blank the fallback countdown already armed
+        buybackClosesAt: offer.buybackClosesAt ?? state.buybackClosesAt,
         // the offer can arrive before the broadcast, so it opens the panel on its own
         buybackOpen: true,
         step: state.iAmEliminated ? 'buyback' : state.step,

@@ -1,90 +1,23 @@
-import { useMemo, useState } from 'react';
-import { errorText, initialState, reduce, type SurvivalState } from './survival';
-// Stage first, CharacterEditor second: a stylesheet is emitted where the module that pulls it in
-// is first VISITED, so these two lines are what put leaflet.css, then ui.css, then
-// characterEditor.css ahead of App.css. Sorting this list would re-sort the cascade with it.
+// Layout only: which panel sits where, and which wired value feeds which prop.
+// The hooks and their mutual wiring live in hooks/useAppWiring; the modals in
+// components/AppDialogs.
+
+// Stage first, AppDialogs second: a stylesheet is emitted where the module that pulls it in
+// is first VISITED, so these two lines are what put leaflet.css (via the Stage's map), then
+// ui.css and characterEditor.css (via the dialogs) ahead of App.css. Sorting this list would
+// re-sort the cascade with it.
 import { Stage } from './components/Stage';
-import { CharacterEditor } from './ui/CharacterEditor';
+import { AppDialogs } from './components/AppDialogs';
 import { Aside } from './components/Aside';
-import { BookingDialog } from './components/BookingDialog';
 import { Header } from './components/Header';
-import { BuyBackQuoteDialog, LobbyStatusDialog } from './components/InspectorDialogs';
 import { Toolbar } from './components/Toolbar';
-import { useActionRunner } from './hooks/useActionRunner';
-import { useBooking } from './hooks/useBooking';
-import { useClock } from './hooks/useClock';
-import { useDialogs } from './hooks/useDialogs';
-import { useGateway } from './hooks/useGateway';
-import { useMatchActions } from './hooks/useMatchActions';
-import { useMatchEntry } from './hooks/useMatchEntry';
-import { useMyLook } from './hooks/useMyLook';
-import { useProfileEdits } from './hooks/useProfileEdits';
-import { useSession } from './hooks/useSession';
-import { useTickets } from './hooks/useTickets';
-import type { ActionDeps } from './hooks/types';
+import { useAppWiring } from './hooks/useAppWiring';
 import './App.css';
 import './ui/shell.css';
 
 export default function App() {
-  const now = useClock();
-  const [state, setState] = useState<SurvivalState>(initialState);
-
-  // The socket. Both handlers are closures the WEBSOCKET calls, never this render, so naming a
-  // hook declared further down is safe — and unavoidable: the session needs a gateway to sign in
-  // through, and the gateway needs a session to sign in as.
-  const conn = useGateway({
-    onOpen: (gateway) => void session.signIn(gateway),
-    onSurvivalEvent: (ev) => setState((s) => reduce(s, ev, session.playerIdRef.current)),
-  });
-
-  const { busy, run, runInDialog, dialogError, setDialogError } = useActionRunner(
-    conn.pushLog,
-    // survival.buyBack rejects with the server's machine reason ('insufficient_tickets'),
-    // not a sentence. errorText translates a known tag and passes real prose through.
-    (message) => setState((s) => ({ ...s, lastError: errorText(message) })),
-  );
-
-  const deps: ActionDeps = useMemo(
-    () => ({ gw: conn.gw, run, runInDialog, pushLog: conn.pushLog, setState }),
-    [conn.gw, conn.pushLog, run, runInDialog],
-  );
-
-  const dialogs = useDialogs(() => setDialogError(null));
-  // The reset list is mockUser's: a new player inherits nothing from the one being replaced.
-  const session = useSession(deps, () => {
-    setState(initialState);
-    booking.forget();
-    match.forgetSnapshots();
-  });
-  const booking = useBooking(deps, session.setProfile);
-  const tickets = useTickets(deps, state.step);
-  const entry = useMatchEntry(deps, session.setSession, conn.setSurvivalLost);
-  const match = useMatchActions(deps, {
-    state,
-    survivalStatus: conn.status.survival,
-    dialogRef: dialogs.dialogRef,
-    setDialogError,
-    rejoinAndRetry: entry.rejoinAndRetry,
-  });
-  const edits = useProfileEdits(deps, {
-    playerId: session.playerId,
-    setProfile: session.setProfile,
-    fetchProfile: session.fetchProfile,
-    fetchBooking: booking.fetchBooking,
-  });
-
-  const players = Array.isArray(state.players) ? state.players : [];
-  const alive = players.filter((p) => !p.eliminated).length;
-  const myLook = useMyLook(session.playerId, session.profile, booking.status, state.players);
-
-  const openBooking = () => dialogs.open('booking', booking.refresh);
-  const openLobbyStatus = () => dialogs.open('lobby', match.lobbyStatus);
-  const openQuote = () => dialogs.open('quote', match.quoteBuyBack);
-  const openCharacterEditor = () =>
-    // Refresh what the editor calls «зараз»: without it the editor falls back to the roster's
-    // registration-time copy, which a previous edit already invalidated. A miss only means that
-    // fallback stays — the reason is in the log.
-    dialogs.open('character', () => run('beG.getContext', session.fetchProfile));
+  const w = useAppWiring();
+  const { state, conn, session, entry, match, now, busy, players, alive } = w;
 
   return (
     <div className="app">
@@ -106,15 +39,15 @@ export default function App() {
         onStart={entry.startEverything}
         onConnectAll={entry.connectAll}
         onMockUser={session.mockUser}
-        onCharacter={openCharacterEditor}
-        onGrantTickets={tickets.grantTickets}
-        onRefreshTickets={tickets.refreshTickets}
-        onBooking={openBooking}
+        onCharacter={w.openCharacterEditor}
+        onGrantTickets={w.tickets.grantTickets}
+        onRefreshTickets={w.tickets.refreshTickets}
+        onBooking={w.openBooking}
         onJoin={entry.joinSurvival}
-        onLobbyStatus={openLobbyStatus}
+        onLobbyStatus={w.openLobbyStatus}
         onLeave={entry.leaveSurvival}
         onAd={match.recordAdView}
-        onQuote={openQuote}
+        onQuote={w.openQuote}
       />
 
       <main>
@@ -140,59 +73,20 @@ export default function App() {
         />
       </main>
 
-      {/* ─── dialogs ──────────────────────────────────────────────────────────────
-          Everything here is something you LOOK UP or CHANGE about yourself, never something
-          you do during a round: the match panels stay on the stage, where a running timer is
-          visible and nothing has to be dismissed to answer a question. */}
-
-      <BookingDialog
-        open={dialogs.dialog === 'booking'}
-        onClose={dialogs.close}
-        status={booking.status}
-        me={session.playerId}
-        now={now}
-        busy={!!busy}
-        dialogError={dialogError}
-        onRefresh={booking.refresh}
-        onMockClan={booking.mockClan}
-        onChangeFlag={booking.changeFlag}
-        onCharacter={openCharacterEditor}
-      />
-
-      <LobbyStatusDialog
-        open={dialogs.dialog === 'lobby'}
-        onClose={dialogs.close}
-        busy={!!busy}
-        dialogError={dialogError}
-        onRefresh={match.lobbyStatus}
-        info={match.lobbyInfo}
-        state={state}
-        players={players.length}
-        alive={alive}
-      />
-
-      <BuyBackQuoteDialog
-        open={dialogs.dialog === 'quote'}
-        onClose={dialogs.close}
-        busy={!!busy}
-        dialogError={dialogError}
-        onRefresh={match.refreshQuote}
-        info={match.quoteInfo}
+      <AppDialogs
+        dialogs={w.dialogs}
         state={state}
         now={now}
-      />
-
-      {/* The one dialog that WRITES. All three of its calls go through run(), so a refusal comes
-          back as a rejection carrying main-server's own wording, which is what the editor puts
-          on screen. */}
-      <CharacterEditor
-        open={dialogs.dialog === 'character'}
-        onClose={dialogs.close}
-        current={myLook}
         busy={busy}
-        onApplyCharacter={edits.applyCharacter}
-        onApplyFlag={edits.applyFlag}
-        onGrant={edits.grantToPlayer}
+        dialogError={w.dialogError}
+        playerId={session.playerId}
+        playersCount={players.length}
+        alive={alive}
+        booking={w.booking}
+        match={match}
+        edits={w.edits}
+        myLook={w.myLook}
+        onCharacter={w.openCharacterEditor}
       />
     </div>
   );

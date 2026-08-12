@@ -10,7 +10,7 @@
 import { MapPicker } from '../MapPicker';
 import { asMiss, type SurvivalState } from '../survival';
 
-export function ResultsView({ state, me }: { state: SurvivalState; me?: string }) {
+export function ResultsView({ state, me, now }: { state: SurvivalState; me?: string; now: number }) {
   // the two modes the floating delta decides; QUESTION / CHRONO carry no miss at all
   const byMiss = state.mode === 'MAP' || state.mode === 'NUMBER';
   const unit = state.mode === 'MAP' ? ' км' : '';
@@ -38,6 +38,16 @@ export function ResultsView({ state, me }: { state: SurvivalState; me?: string }
   return (
     <div className="panel results">
       <h2>Результат раунду {state.round}</h2>
+
+      {/* C1: the server's own absolute instant of the next roundStarted. On a round that opened
+          a BuyBack window it EQUALS the window's closesAt (the window IS the pause); on one that
+          opened none this is the only countdown the pause has. `undefined` = an older server
+          that never said — then there is nothing honest to count. */}
+      {state.nextRoundAt !== undefined && (
+        <p className="countdown">
+          наступний раунд через {Math.max(0, Math.ceil((state.nextRoundAt - now) / 1000))} с
+        </p>
+      )}
 
       {correctPoint && (
         <div style={{ marginBottom: 14 }}>

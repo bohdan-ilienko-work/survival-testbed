@@ -13,6 +13,7 @@
 //   reduce.ts   — the event dispatcher, split by family into reduceLobby / Round / Buyback
 
 export type {
+  LastResult,
   LobbyPlayer,
   Question,
   RankReward,
@@ -21,12 +22,23 @@ export type {
   Score,
 } from './survival/wire';
 export type { Step, SurvivalState } from './survival/state';
-export { initialState, stepLabel } from './survival/state';
+export { countHumans, initialState, stepLabel } from './survival/state';
 // the one guard a component needs of its own: the results table reads each player's miss
 // straight off the score line, which is as untrusted as anything else off the wire
-export { asMiss } from './survival/guards';
-export { errorText, reasonText, reasonWithTag } from './survival/reasons';
+export { asLastResult, asMiss } from './survival/guards';
+export {
+  LOBBY_ENDED_TEXT,
+  MATCH_IN_PROGRESS_TEXT,
+  errorText,
+  isLobbyEnded,
+  reasonText,
+  reasonWithTag,
+} from './survival/reasons';
 export { applyBuyBackQuote, applyTicketBalance } from './survival/wallet';
 export type { BookingLobby, BookingStatus } from './survival/booking';
-export { readBookingStatus, readOnboardingClosesAt } from './survival/booking';
+export {
+  applyConnectReply,
+  readBookingStatus,
+  readOnboardingClosesAt,
+} from './survival/booking';
 export { reduce } from './survival/reduce';

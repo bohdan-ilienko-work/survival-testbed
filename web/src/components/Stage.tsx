@@ -9,6 +9,7 @@ import { stepLabel, type LobbyPlayer, type SurvivalState } from '../survival';
 import { BuyBackPanel } from './BuyBackPanel';
 import { ClientStateTable } from './ClientStateTable';
 import { FinishView } from './FinishView';
+import { humansBotsLabel } from './peopleWords';
 import { QuestionView } from './QuestionView';
 import { ResultsView } from './ResultsView';
 
@@ -42,8 +43,13 @@ export function Stage({
 }: StageProps) {
   const secondsLeft = useMemo(() => {
     if (!state.deadline) return null;
+    // The deadline times ANSWERS. roundResult clears it, but a tiebreak's instant can still be
+    // standing when tiebreakResult lands on 'results' — during the results/buyback pause the
+    // round it timed is over, and it must not sit as a dead red «0s» beside the live pause
+    // countdown (nextRoundAt / the BuyBack window, which are the same instant under C1).
+    if (state.step === 'results' || state.step === 'buyback') return null;
     return Math.max(0, Math.round((state.deadline - now) / 1000));
-  }, [state.deadline, now]);
+  }, [state.deadline, state.step, now]);
 
   return (
     <div className="stage">
@@ -83,7 +89,8 @@ export function Stage({
               </p>
               <p className="hint">
                 Встигни відкрити ще вкладку й зайти там — потрапите в це саме лоббі.
-                Коли час вийде, вільні місця доберуться ботами.
+                Боти сидять у ростері з моменту відкриття лоббі; таймер лише добере
+                ними вільні місця, що залишаться.
               </p>
             </>
           ) : (
@@ -91,7 +98,11 @@ export function Stage({
               <p>старт: {new Date(state.scheduledStartAt).toLocaleString()}</p>
             )
           )}
-          <p>гравців у лоббі: <b>{players.length || '—'}</b></p>
+          {/* C2: bots are seeded from lobby open, so the bare length says nothing — split it */}
+          <p>
+            гравців у лоббі: <b>{players.length || '—'}</b>
+            {players.length > 0 && <> · {humansBotsLabel(players.length, players)}</>}
+          </p>
         </div>
       )}
 
@@ -113,7 +124,7 @@ export function Stage({
           </div>
         ))}
 
-      {state.step === 'results' && <ResultsView state={state} me={playerId} />}
+      {state.step === 'results' && <ResultsView state={state} me={playerId} now={now} />}
 
       {state.step === 'buyback' && (
         <BuyBackPanel

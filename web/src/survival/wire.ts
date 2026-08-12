@@ -89,3 +89,22 @@ export interface RankReward {
   gems: number;
   tickets: number;
 }
+
+/**
+ * The `lastResult` block a survival.connect reply may carry (C3) — present only for a human
+ * participant of the LAST finished lobby, and only within 120 s of the finish. It exists so a
+ * tab that reloaded across the end of its match still gets the payout screen: the finish
+ * broadcasts went out while this socket did not exist, and this block is the only place they
+ * can be re-learned. Every field is optional because each is guarded off the wire on its own —
+ * a broken roster must not cost the payouts sitting next to it.
+ */
+export interface LastResult {
+  lobbyId?: string;
+  /** ABSOLUTE unix ms of the finish — the instant the 120 s freshness window counts from */
+  finishedAt?: number;
+  winnerId?: string;
+  totalRounds?: number;
+  rewards?: RewardRow[];
+  rewardTable?: RankReward[];
+  roster?: LobbyPlayer[];
+}

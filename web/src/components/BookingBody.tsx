@@ -1,16 +1,9 @@
-// 1а. Реєстрація — the sign-up list itself. The dialog around it is BookingDialog.
+// 1а. Реєстрація — the sign-up list itself. The dialog around it is BookingDialog,
+// the row markup is BookingRoster.
 
-import type { BookingStatus, LobbyPlayer } from '../survival';
-import { CharacterImg, FlagImg } from './PlayerArt';
-
-/** 1 гравець · 2 гравці · 5 гравців — this count is the headline, so it has to agree. */
-const playersWord = (n: number): string => {
-  const tens = n % 100;
-  const ones = n % 10;
-  if (ones === 1 && tens !== 11) return 'гравець';
-  if (ones >= 2 && ones <= 4 && (tens < 12 || tens > 14)) return 'гравці';
-  return 'гравців';
-};
+import { MATCH_IN_PROGRESS_TEXT, type BookingStatus } from '../survival';
+import { BookingRoster } from './BookingRoster';
+import { humansBotsLabel } from './peopleWords';
 
 /**
  * "через 3 год 12 хв". The match is scheduled hours ahead, so seconds are noise until the last
@@ -79,9 +72,20 @@ export function BookingBody({
         </p>
       ) : (
         <>
+          {/* C4: joinable=false while registered is ALSO false = a match is RUNNING right now —
+              joinSurvival can only refuse, so this screen says why up front instead of letting
+              the join button teach it through an error. Both checks are strict `=== false`:
+              an older main-server that says neither must keep the legacy behaviour. */}
+          {status.joinable === false && status.registered === false && (
+            <p className="deny">
+              {MATCH_IN_PROGRESS_TEXT} (<code>joinable: false</code>).
+            </p>
+          )}
           <div className="top">
             <div className="count">
-              <b>{total}</b> <span>{playersWord(total)} зареєстровано</span>
+              {/* C2: bots are in the roster from lobby open, so the bare total is mostly bots —
+                  an unsplit «7 гравців» would be a claim about two humans */}
+              <b>{total}</b> <span>зареєстровано — {humansBotsLabel(total, roster)}</span>
             </div>
             <div className="meta">
               <span>
@@ -103,32 +107,7 @@ export function BookingBody({
 
           {Number.isFinite(startsAt) && <p className="until">{untilText(startsAt - now)}</p>}
 
-          {roster.length === 0 ? (
-            <p className="hint">Ще ніхто не зареєструвався.</p>
-          ) : (
-            <div className="rosterbox">
-              <div className="rhead">
-                <span className="num">№</span>
-                <span>прап.</span>
-                <span>перс.</span>
-                <span>гравець</span>
-                <span className="tail">клан</span>
-              </div>
-              <ol className="roster">
-                {roster.map((entry, index) => (
-                  <RosterRow
-                    // Registration order is the contract, so duplicates must NOT be collapsed:
-                    // the index is what keeps the key unique even if the server ever repeats a
-                    // playerId, and the row number below comes from that same index.
-                    key={`${index}:${entry?.playerId ?? ''}`}
-                    entry={entry}
-                    index={index}
-                    me={me}
-                  />
-                ))}
-              </ol>
-            </div>
-          )}
+          <BookingRoster roster={roster} me={me} />
 
           {lobby.activePlayerCount !== undefined && lobby.activePlayerCount !== total && (
             <p className="answered">
@@ -147,42 +126,5 @@ export function BookingBody({
         ДО «Зайти в Survival» — інакше зміну буде видно лише в наступному лоббі.
       </p>
     </div>
-  );
-}
-
-/**
- * One booking row: number, flag, character, nickname, clan.
- * Each field is re-checked here rather than trusted: the roster is read straight off the wire
- * (see readBookingStatus, which only guarantees it is an array), so a row that is not an object
- * at all must render as a dash instead of taking the whole panel down with it.
- */
-function RosterRow({ entry, index, me }: { entry: LobbyPlayer; index: number; me?: string }) {
-  const row: LobbyPlayer = entry && typeof entry === 'object' ? entry : ({} as LobbyPlayer);
-  const id = typeof row.playerId === 'string' ? row.playerId : '';
-  const name = typeof row.name === 'string' ? row.name.trim() : '';
-  // '' is the contracted value for "no clan" (bots always), so an empty column is a real answer
-  const clan = typeof row.clan === 'string' ? row.clan.trim() : '';
-  const mine = !!me && id === me;
-
-  return (
-    <li className={`${mine ? 'me' : ''} ${row.eliminated ? 'out' : ''}`}>
-      {/* 1..N from the ARRAY INDEX: `slot` is null for the whole of BOOKING */}
-      <span className="num">{index + 1}</span>
-      {/* the same two components the aside roster uses — see PlayerArt */}
-      <FlagImg flag={row.flag} />
-      <CharacterImg id={row.character} />
-      <span className="nick" title={id}>
-        {name || (id ? id.slice(0, 12) : '—')}
-      </span>
-      <span className="tail">
-        {clan && (
-          <span className="clan" title="клан">
-            {clan}
-          </span>
-        )}
-        {row.isBot && <span className="bot">бот</span>}
-        {mine && <span className="mine">я</span>}
-      </span>
-    </li>
   );
 }

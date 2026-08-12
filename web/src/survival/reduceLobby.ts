@@ -73,6 +73,10 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         ...NO_OFFER,
         buybackOpen: false,
         step: 'finished',
+        // no next round is coming, and the last answer window is over — either instant left
+        // ticking on the finish screen would promise a round that will never start
+        nextRoundAt: undefined,
+        deadline: undefined,
         winnerId: p.winnerId ?? null,
         totalRounds: p.totalRounds ?? state.round,
         // the payouts may ride inside this payload or arrive as their own 'lobbyRewards'

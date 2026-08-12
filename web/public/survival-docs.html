@@ -129,7 +129,7 @@
 <div class="wrap">
 
 <header class="top">
-  <div class="eyebrow">Battle of Geniuses · гілка SurvivalMode · оновлено 04.08.2026</div>
+  <div class="eyebrow">Battle of Geniuses · гілка SurvivalMode · оновлено 12.08.2026</div>
   <h1>Survival mode: що з чим говорить — і як це підключити</h1>
   <p class="lede">
     Перша половина — архітектура (хто кому дзвонить і чому). Друга — протокольний довідник для
@@ -256,7 +256,7 @@ sequenceDiagram
   C->>M: beG.getSurvivalStatus()
   M->>S: gRPC GetActiveLobby{}
   S-->>M: {lobbyId, state, playerCount, activePlayerCount,<br/>scheduledStartAt, round, roster}
-  M-->>C: {available, registered, lobby, tickets, entryCost, hosts, port, …}
+  M-->>C: {available, registered, joinable, lobby, tickets, entryCost, hosts, port, …}
   Note over C,S: клієнт не торкається survival-server —<br/>ні токена, ні плати, ні подій;<br/>екран оновлюється повторним викликом
 </pre>
   </div>
@@ -265,11 +265,12 @@ sequenceDiagram
   <h3>Відповідь <code>beG.getSurvivalStatus()</code></h3>
   <pre class="block"><code>{
   available: true,        // survival-server відповів; false — режим сьогодні недоступний
-  registered: false,      // чи оплачений вхід САМЕ в це лоббі (див. нижче)
+  registered: false,      // чи я вже маю місце САМЕ в цьому лоббі (див. нижче)
+  joinable: true,         // чи можна зайти В ЦЕ лоббі просто зараз (BOOKING/ONBOARDING)
   lobby: {                // null, коли активного лоббі зараз нема — теж «недоступно»
     lobbyId: "…",
     state: "BOOKING",     // BOOKING | ONBOARDING | ACTIVE | FINISHED | CANCELLED
-    playerCount: 48,      // усього записаних (боти з кінця онбордингу теж тут)
+    playerCount: 48,      // усього записаних; боти є вже під час BOOKING (див. нижче)
     activePlayerCount: 48,// ще не вибулі
     scheduledStartAt: "2026-08-04T17:00:00.000Z",   // ISO-8601, UTC
     round: 0,
@@ -281,12 +282,27 @@ sequenceDiagram
   hosts: ["176.9.78.228"], port: 4001               // куди підключатись ПІСЛЯ joinSurvival
 }</code></pre>
 
+  <h3><code>joinable</code>: коли кнопку «Грати» треба ховати</h3>
+  <p class="sub">Гейт перед <code>beG.joinSurvival()</code>. Головний сервер рахує його як
+  «лоббі існує І воно в <code>BOOKING</code> або <code>ONBOARDING</code>» — рівно ті стани,
+  з яких реєстрація ще може відпрацювати.</p>
+  <div class="scroll-x"><table>
+    <thead><tr><th><code>joinable</code></th><th><code>registered</code></th><th>Що це означає і що робити</th></tr></thead>
+    <tbody>
+      <tr><td><code>true</code></td><td><code>false</code></td><td>звичайне бронювання: показуй «Грати за 1 🎟» → <code>beG.joinSurvival()</code></td></tr>
+      <tr><td><code>false</code></td><td><code>false</code></td><td>матч уже йде (або лоббі взагалі немає). <b><code>joinSurvival</code> не викликати</b>: він відмовить ще ДО руху гаманця («No lobby is open for booking right now»), а гравець побачить помилку замість зрозумілого «матч у процесі, повертайся»</td></tr>
+      <tr><td><code>false</code></td><td><code>true</code></td><td>це <b>не</b> заборона: я вже сиджу в цьому матчі. Повторний <code>joinSurvival</code> дасть свіжий токен <b>без повторної плати</b> — це шлях реконекта</td></tr>
+      <tr><td><i>поля немає</i></td><td>—</td><td>старий main-server: поводься як раніше, гейт відсутній</td></tr>
+    </tbody>
+  </table></div>
+
   <h3>Рядок ростера — публічний профіль, нічого гаманцевого</h3>
   <pre class="block"><code>{
   playerId: "…",
   name: "Ігор",
   character: 3,           // номер персонажа → аватар
-  flag: "UA",             // ISO-код; "UN" коли geoip не впізнав IP, "" лише у ботів
+  flag: "UA",             // ISO-код; "UN" коли geoip не впізнав IP. У ботів теж реальна
+                          // випадкова країна (пул із 55) — порожнім у бота не буває
   clan: "Genius Squad",   // НАЗВА клану, "" коли гравець без клану; у ботів завжди ""
   isBot: false,
   slot: null,             // null аж до початку бою
@@ -301,11 +317,11 @@ sequenceDiagram
       <tr><td><i>індекс у масиві</i></td><td>—</td><td><b>номер рядка = індекс + 1</b>; <code>slot</code> для цього не годиться</td></tr>
       <tr><td><code>playerId</code></td><td>string</td><td>ключ рядка; збіг зі своїм — підсвітити «це я»</td></tr>
       <tr><td><code>name</code></td><td>string</td><td>нікнейм</td></tr>
-      <tr><td><code>flag</code></td><td>string</td><td>ISO-код країни (<code>"UA"</code>). У живого гравця порожнім не буває: коли geoip не впізнав IP, main-server ставить <code>"UN"</code>. <code>""</code> — лише у ботів</td></tr>
+      <tr><td><code>flag</code></td><td>string</td><td>ISO-код країни (<code>"UA"</code>). Порожнім не буває ні в кого: коли geoip не впізнав IP, main-server ставить <code>"UN"</code>, а боту сервер видає випадкову реальну країну. <code>""</code> <b>більше не є ознакою бота</b></td></tr>
       <tr><td><code>character</code></td><td>number</td><td>аватар; у ботів <code>0</code></td></tr>
       <tr><td><code>clan</code></td><td>string</td><td><b>назва</b> клану, не id — резолвить main-server при реєстрації. <code>""</code> = без клану, плашку ховай</td></tr>
-      <tr><td><code>isBot</code></td><td>boolean</td><td>у <code>BOOKING</code> ботів ще немає — їх дописують у кінці онбордингу</td></tr>
-      <tr><td><code>ready</code></td><td>boolean</td><td>«готовий»; має сенс до бою, зі стартом сервер ставить <code>true</code> усім</td></tr>
+      <tr><td><code>isBot</code></td><td>boolean</td><td><b>боти є вже в <code>BOOKING</code></b>: 1–3 сідають за кожною реєстрацією людини з імовірністю 50%, ще 3–4 — у мить відкриття онбордингу, решта — добором у кінці. Рядок бота відрізняється <b>лише</b> цим полем</td></tr>
+      <tr><td><code>ready</code></td><td>boolean</td><td>«готовий»; має сенс до бою, зі стартом сервер ставить <code>true</code> усім. У ботів <code>true</code> з моменту посадки</td></tr>
       <tr><td><code>slot</code></td><td>number | null</td><td>місце в бою; заповнюється разом із <code>fightStarted</code></td></tr>
       <tr><td><code>eliminated</code> / <code>eliminatedAtRound</code></td><td>boolean / number | null</td><td>для того самого списку вже під час бою</td></tr>
     </tbody>
@@ -318,6 +334,9 @@ sequenceDiagram
       години до старту — токен, узятий заради списку учасників, протухне задовго до входу.
       До того ж видає його <code>beG.joinSurvival()</code>, який <b>списує вхідний тікет</b>:
       подивитись, хто записався, не має коштувати ані тікета.</p>
+    <p>Ще дві властивості токена: нова реєстрація того самого гравця <b>гасить його попередній
+      токен</b>, а завершення лоббі знищує <b>всі</b> токени цього лоббі. Тому «про запас»
+      токени не бережуть — беруть свіжий безпосередньо перед <code>connect</code>.</p>
   </div>
 
   <div class="note warn">
@@ -331,9 +350,11 @@ sequenceDiagram
 
   <div class="note">
     <p><strong>Дві дрібниці, що економлять годину.</strong></p>
-    <p><code>registered</code> головний сервер тримає <b>в памʼяті процесу</b> (запис живе 6 год):
-      після його рестарту прапорець стане <code>false</code>, хоча місце в лоббі нікуди не поділось.
-      Надійніша перевірка «я в списку» — знайти свій <code>playerId</code> у <code>roster</code>.</p>
+    <p><code>registered</code> рахується як «мій <code>playerId</code> є в <code>roster</code>
+      активного лоббі» <b>АБО</b> «в памʼяті main-server є оплачений вхід саме в це лоббі».
+      Місце в ростері само по собі є доказом оплати, тому рестарт головного сервера цей
+      прапорець більше <b>не ламає</b>. Пошук себе в <code>roster</code> лишається чинною
+      дублюючою перевіркою — але вже не як обхід бага.</p>
     <p>Виклик заразом видає безкоштовний щоденний тікет (той самий, що й <code>beG.getTickets</code>:
       1/добу UTC, ідемпотентно), тож <code>tickets</code> у відповіді вже свіжий — окремо питати
       баланс для цього екрана не треба.</p>
@@ -371,17 +392,33 @@ sequenceDiagram
 
   C->>M: beG.joinSurvival()
   Note over M: видає безкоштовний щоденний тікет<br/>(1/добу UTC, ідемпотентно)
-  M->>S: gRPC RegisterPlayer{playerId, name, lang, ticketBalance}
-  S-->>M: {token, lobbyId, state, scheduledStartAt}
-  M->>M: списати 1 тікет + moneyFlow
-  M-->>C: {token, lobbyId, state, scheduledStartAt}
+  M->>S: gRPC GetActiveLobby{}
+  S-->>M: {lobbyId, state, roster, …}
+  M->>M: списати 1 тікет + moneyFlow<br/>(лише якщо це НЕ реконект)
+  M->>S: gRPC RegisterPlayer{playerId, name, character,<br/>flag, clan, lang, ticketBalance}
+  S-->>M: {token, lobbyId, state, scheduledStartAt, alreadyRegistered}
+  Note over M: реєстрація впала → тікет повертається (refundEntry)
+  M-->>C: {token, lobbyId, state, scheduledStartAt,<br/>hosts, port, tickets}
 
   C->>S: survival.connect([token])
-  S->>S: погасити токен, звʼязати сокет ↔ playerId
-  S-->>C: {playerId, lobbyId, state, round, reconnected, roster}
+  S->>S: погасити токен, закрити попередній сокет<br/>цього гравця, звʼязати сокет ↔ playerId
+  S-->>C: {playerId, lobbyId, state, scheduledStartAt, onboardingClosesAt,<br/>round, reconnected, roster, lastResult?}
   S-)C: ticketsUpdated {balance, reason: "initial"}
 </pre>
   </div>
+
+  <h3>Повна відповідь <code>survival.connect([token])</code></h3>
+  <pre class="block"><code>{
+  playerId: "…",
+  lobbyId: "…",
+  state: "BOOKING",                          // BOOKING | ONBOARDING | ACTIVE | FINISHED | CANCELLED
+  scheduledStartAt: "2026-08-12T17:00:00.000Z",  // ISO-8601, UTC
+  onboardingClosesAt: 1786000000000,         // АБСОЛЮТНІ epoch ms; null поза вікном онбордингу
+  round: 0,
+  reconnected: false,                        // true ЛИШЕ коли бій справді йде (див. нижче)
+  roster: [ … ],                             // рядок того самого формату, що в §2
+  lastResult?: { … }                         // лише в межах 120 с після фінішу СВОГО матчу
+}</code></pre>
 
   <ol class="steps">
     <li><b>Логін.</b> Після <code>signIn</code> жоден виклик не приймає <code>playerId</code> —
@@ -390,15 +427,72 @@ sequenceDiagram
       а не помилка.</li>
     <li><b>Заявка.</b> <code>beG.joinSurvival()</code> без параметрів. Новачку вистачає
       безкоштовного щоденного тікета — головний сервер видає його сам перед списанням.</li>
-    <li><b>Оплата.</b> Тікет списується після успішної реєстрації. Повторний <code>joinSurvival</code>
-      того самого гравця — це реконект: свіжий токен без повторної плати.</li>
-    <li><b>Підключення.</b> Токен одноразовий (TTL 10 хв). Відповідь <code>connect</code> несе
-      <code>roster</code> (рядок — того самого формату, що в §2) — <b>єдине джерело «хто вже
-      в лоббі»</b> для гравця, що приєднався: власного <code>playerJoined</code> він не отримує,
-      бо розсилка пішла до існування його сокета.</li>
-    <li><b>Баланс.</b> Одразу після відповіді прилітає перший <code>ticketsUpdated</code> —
-      клієнту не треба нічого запитувати.</li>
+    <li><b>Оплата.</b> Тікет списується <b>ПЕРЕД</b> реєстрацією, а не після: спершу
+      <code>GetActiveLobby</code>, потім списання, і лише тоді <code>RegisterPlayer</code>.
+      Якщо реєстрація не вдалась — тікет повертається (<code>refundEntry</code>). А в лоббі,
+      яке вже не бронюється, main-server відмовляє ще <b>до</b> списання:
+      «No lobby is open for booking right now». Повторний <code>joinSurvival</code> у ТЕ САМЕ
+      лоббі — це реконект: свіжий токен без повторної плати.</li>
+    <li><b>Підключення.</b> Токен одноразовий (TTL 10 хв), і <code>connect</code> примусово
+      закриває попередній сокет цього ж гравця — <b>друга вкладка вбиває першу</b>. Відповідь
+      несе <code>roster</code> — <b>єдине джерело «хто вже в лоббі»</b> для гравця, що
+      приєднався (власного <code>playerJoined</code> він не отримує, бо розсилка пішла до
+      існування його сокета), <code>onboardingClosesAt</code> — абсолютний дедлайн, від якого
+      малюється відлік до старту, і, за певних умов, <code>lastResult</code>.</li>
+    <li><b>Реконект.</b> <code>reconnected: true</code> тепер означає вузьке: лоббі в
+      <code>ACTIVE</code> і бій <b>справді йде</b>. У <code>BOOKING</code>/<code>ONBOARDING</code>
+      воно завжди <code>false</code>, навіть якщо гравець уже в ростері. Коли воно
+      <code>true</code>, слідом приватно прилітає <code>playerReconnected</code> зі станом
+      раунду — саме звідти відновлюється екран бою, а не з прапорця.</li>
+    <li><b>Баланс.</b> Одразу після відповіді прилітає перший <code>ticketsUpdated</code>
+      (<code>reason: "initial"</code>) — клієнту не треба нічого запитувати. Сервер ще й
+      перечитує баланс у main-server у фоні, тож може прилетіти другий
+      <code>ticketsUpdated</code> із <code>reason: "refresh"</code>.</li>
   </ol>
+
+  <h3>Матч скінчився: сигнал «Lobby has ended»</h3>
+  <p>Сокет, чиє лоббі <b>завершилось</b>, на <b>кожен</b> із семи RPC — <code>leaveLobby</code>,
+  <code>ready</code>, <code>submitAnswer</code>, <code>buyBack</code>,
+  <code>getBuyBackQuote</code>, <code>recordAdView</code>, <code>getLobbyStatus</code> —
+  відповідає одним і тим самим конвертом:</p>
+  <pre class="block"><code>{ error: { code: 0, description: "Lobby has ended" } }</code></pre>
+  <div class="note warn">
+    <p><strong>Це не помилка авторизації, а команда перезапустити сцену.</strong></p>
+    <p>Раніше в цій ситуації віддавалось <code>"Not authenticated"</code>, і клієнт не міг
+      відрізнити «матч скінчився» від «зламана сесія». Тепер <code>"Not authenticated"</code>
+      лишається <b>лише</b> для сокета, який ніколи не автентифікувався.</p>
+    <p>Сокет при цьому <b>не закривають</b>: TCP живий, щоб клієнт домалював фінальний екран, —
+      але він відвʼязаний, і жодна подія до нього більше не дійде. Ретраїти той самий виклик
+      марно.</p>
+    <p>Правильна реакція — <b>повний скид сцени і повторний вхід зі СВІЖИМ токеном</b>
+      (<code>beG.joinSurvival</code> → <code>survival.connect</code>). Старий токен уже
+      погашений при першому <code>connect</code> і, крім того, знищений разом із лоббі. Сам
+      <code>connect</code> ніколи так не відповідає — успішний <code>connect</code> знімає
+      позначку і автентифікує сокет уже в новому лоббі; його власні помилки —
+      <code>'Invalid token'</code>, <code>'No active lobby'</code>,
+      <code>'Registration is no longer valid'</code>.</p>
+  </div>
+
+  <h3><code>lastResult</code> — фінальна дошка після повторного входу</h3>
+  <pre class="block"><code>lastResult: {
+  lobbyId: "…",
+  finishedAt: 1786000000000,     // АБСОЛЮТНІ epoch ms моменту фінішу
+  winnerId: "…" | null,
+  totalRounds: 17,
+  rewards: [ { playerId, rank, gems, tickets }, … ],   // лише люди, нульові рядки пропущені
+  rewardTable: [ { gems, tickets }, … ],               // що платить КОЖНЕ місце, індекс 0 = 1-ше
+  roster: [ … ]                                        // фінальний склад, вибулі теж
+}</code></pre>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Правило</th><th>Наслідок для клієнта</th></tr></thead>
+    <tbody>
+      <tr><td>Їде <b>виключно</b> у відповіді <code>connect</code></td><td>жодною подією її не отримати — клієнт, який був офлайн на фініші, інакше дошку не побачить</td></tr>
+      <tr><td>Лише людині, яка реально грала те лоббі</td><td>стороннім сокетам поля просто немає</td></tr>
+      <tr><td>Лише 120 с від фінішу (<code>SURVIVAL_LAST_RESULT_WINDOW_MS</code>)</td><td>поза вікном поле відсутнє — це не помилка</td></tr>
+      <tr><td>Слот один, не історія</td><td>наступний фініш затирає попередній; скасоване лоббі (<code>lobbyCancelled</code>) дошки не лишає взагалі</td></tr>
+      <tr><td><b>Практичний наслідок</b></td><td>щоб забрати дошку, клієнт має пройти <code>beG.joinSurvival</code> ще раз — а це вже <b>НАСТУПНЕ</b> лоббі, тож за нього <b>спишеться тікет</b></td></tr>
+    </tbody>
+  </table></div>
 
   <div class="note warn">
     <p><strong>Чому не «просто передай свій playerId»?</strong></p>
@@ -438,22 +532,46 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> BOOKING
   BOOKING --> ONBOARDING: startAt із набору дня, у дев-режимі — перший гравець
-  ONBOARDING --> ACTIVE: всі готові чи повне лоббі, максимум по таймеру + боти до мінімуму
-  ACTIVE --> FINISHED: лишився 1 гравець або стеля раундів
+  ONBOARDING --> ACTIVE: всі готові чи повне лоббі, максимум по таймеру + боти до цілі добору
+  ONBOARDING --> CANCELLED: після добору ботами менше за поріг скасування
+  ACTIVE --> FINISHED: лишився 1 гравець, стеля раундів, вичерпані питання або закрите лоббі
   FINISHED --> [*]
+  CANCELLED --> [*]
 </pre>
   </div>
 
   <div class="scroll-x"><table>
     <thead><tr><th>Параметр</th><th class="num">Прод</th><th class="num">Дев (зараз)</th></tr></thead>
     <tbody>
-      <tr><td>Старт лоббі</td><td class="num">17:00 UTC (керується набором дня; адмінка може пересунути)</td><td class="num">≈30 с після входу першого гравця</td></tr>
+      <tr><td>Старт лоббі</td><td class="num">17:00 UTC (керується набором дня; адмінка може пересунути)</td><td class="num">під <code>INSTANT_START</code> — на найближчому тіку планувальника (1 с) після реєстрації ПЕРШОЇ людини</td></tr>
+      <tr><td>Вікно онбордингу</td><td class="num">5 хв (<code>SURVIVAL_ONBOARDING_MS</code>); достроково — повне лоббі або всі люди Ready</td><td class="num">min(<code>SURVIVAL_ONBOARDING_MS</code>, <code>SURVIVAL_INSTANT_ONBOARDING_MS</code>) = 5 с</td></tr>
       <tr><td>Реєстрація</td><td>лише до онбордингу</td><td>відкрита і під час онбордингу</td></tr>
-      <tr><td>Гравців</td><td class="num" colspan="2">8 … 64 (менше — добір ботами, боти реально грають)</td></tr>
+      <tr><td>Гравців</td><td class="num" colspan="2">місткість 64 (<code>SURVIVAL_MAX_PLAYERS</code>). 8 (<code>SURVIVAL_MIN_PLAYERS</code>) — це <b>поріг скасування</b>, а не ціль добору; ціль добору живе в наборі дня (<code>bots</code>) або в <code>SURVIVAL_BOT_FILL_TO</code>, а ефективний поріг скасування = min(ціль, 8). Боти реально грають</td></tr>
       <tr><td>Вхід</td><td class="num" colspan="2">1 тікет (новачка покриває безкоштовний щоденний)</td></tr>
-      <tr><td>Раундів у наборі</td><td class="num" colspan="2">30 (останній — завжди MAP)</td></tr>
-      <tr><td>Відповідь / викуп / пауза</td><td class="num" colspan="2">30 с / 15 с / 3 с</td></tr>
-      <tr><td>Реконект-грейс</td><td class="num" colspan="2">30 с (обрив мережі ≠ вибування)</td></tr>
+      <tr><td>Стеля раундів</td><td class="num" colspan="2">min(<code>roundsTotal</code> набору, 60) (<code>SURVIVAL_MAX_ROUNDS</code>). Режим кожного раунду задає слот набору; правило «раунд 15 — завжди MAP» лишилось тільки в легасі-селекторі, тобто коли набору на день немає</td></tr>
+      <tr><td>Відповідь на раунд</td><td class="num" colspan="2">20 с (<code>SURVIVAL_ROUND_MS</code>) — і для звичайного раунду, і для раптового тайбрейку</td></tr>
+      <tr><td>Вікно викупу</td><td class="num" colspan="2">15 с (<code>SURVIVAL_BUYBACK_MS</code>); воно Ж і є паузою між раундами</td></tr>
+      <tr><td>Пауза після звичайного раунду БЕЗ вікна</td><td class="num" colspan="2">10 с (<code>SURVIVAL_ROUND_RESULT_DELAY_MS</code>)</td></tr>
+      <tr><td>Пауза після MAP-раунду БЕЗ вікна</td><td class="num" colspan="2">15 с (<code>SURVIVAL_MAP_RESULT_DELAY_MS</code>) — MAP окрема сцена в Unity</td></tr>
+      <tr><td><code>fightStarted</code> → 1-й раунд</td><td class="num" colspan="2">10 с (<code>SURVIVAL_FIGHT_START_DELAY_MS</code>); <b>жодна подія цей дедлайн не несе</b> — просто чекай ~10 с тиші</td></tr>
+      <tr><td>Реконект</td><td colspan="2">грейсу <b>немає</b>: обрив ≠ вибування, але раунди йдуть далі і кожен пропущений скориться як «немає відповіді»; повернутись можна будь-коли, поки живий</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">
+    <p><code>SURVIVAL_ROUND_START_DELAY_MS</code> (3 с) більше нічого не робить — вікно викупу
+      тепер іде паралельно з паузою. <code>SURVIVAL_DISCONNECT_GRACE_MS</code> (30 с) так само
+      ніде не читається: таймера реконекта в коді немає.</p>
+  </div>
+
+  <h3>Що броадкаститься на кожному переході</h3>
+  <div class="scroll-x"><table>
+    <thead><tr><th>Перехід</th><th>Події</th></tr></thead>
+    <tbody>
+      <tr><td>у <code>BOOKING</code></td><td><code>playerJoined</code> / <code>playerLeft</code> / <code>playerReady</code> — після кожної сервер сам шле <code>rosterUpdate</code></td></tr>
+      <tr><td><code>BOOKING</code> → <code>ONBOARDING</code></td><td><code>onboardingStarted {durationMs, closesAt, players — ЧИСЛО, readyCount}</code>. <code>rosterUpdate</code> за нею <b>не</b> йде; посіяні боти прилітають окремими <code>playerJoined</code> одразу після — і вже вони її тригернуть</td></tr>
+      <tr><td><code>ONBOARDING</code> → <code>ACTIVE</code></td><td><code>fightStarted {lobbyId, players:[{playerId, slot, isBot}]}</code> + <code>rosterUpdate</code>. Фінальна пачка ботів приходить <b>лише</b> цим <code>rosterUpdate</code>, без <code>playerJoined</code></td></tr>
+      <tr><td><code>ONBOARDING</code> → <code>CANCELLED</code></td><td><code>lobbyCancelled {lobbyId}</code>; менеджер одразу підставляє нове лоббі в <code>BOOKING</code></td></tr>
+      <tr><td><code>ACTIVE</code> → <code>FINISHED</code></td><td><code>lobbyFinished {lobbyId, winnerId, totalRounds, rewards, rewardTable}</code></td></tr>
     </tbody>
   </table></div>
 
@@ -461,56 +579,182 @@ stateDiagram-v2
   <code>leaveLobby([])</code> — вийти до бою, <code>getLobbyStatus([])</code> — стан + ростер на вимогу.
   Усі троє працюють лише для вже привʼязаного сокета; <b>до</b> входу склад лоббі показує
   <code>beG.getSurvivalStatus</code> (§2).</p>
+  <p><code>leaveLobby([])</code> працює <b>лише</b> в <code>BOOKING</code> — у будь-якому іншому
+  стані відповідь «Cannot leave at this stage». <code>ready([])</code> приймається і в
+  <code>BOOKING</code>, і в <code>ONBOARDING</code>: прапорець, поставлений під час бронювання,
+  доживає до онбордингу й може завершити його миттєво. Відповіді <code>connect</code> і
+  <code>getLobbyStatus</code> несуть <code>onboardingClosesAt</code> (абсолютні epoch ms або
+  <code>null</code>) — саме звідси клієнт бере відлік онбордингу, якщо не застав події
+  <code>onboardingStarted</code>.</p>
 </section>
 
 <section>
   <h2><span class="num">6</span> Бій: раунди і відповіді</h2>
   <p class="sub">
-    Режими і питання приходять зі <b>щоденного набору</b> (перемішаний цикл
-    <code>QUESTION / NUMBER / CHRONO / MAP</code> без повтору на межі циклів). Клієнту про набір
-    знати нічого не треба — все приїжджає в <code>roundStarted</code>.
+    Режим кожного раунду фіксує <b>слот денного набору</b>. Перемішаний цикл
+    <code>QUESTION / NUMBER / CHRONO / MAP</code> (по одному на цикл, без повтору на межі
+    циклів) — це <b>запасний</b> шлях для раундів, яких у наборі немає, і саме там діє
+    «раунд 15 — завжди MAP». Порожній пул будь-якого режиму деградує в <code>QUESTION</code>.
+    Клієнту про набір знати нічого не треба — усе приїжджає в <code>roundStarted</code>.
   </p>
 
   <pre class="block"><code>// roundStarted (broadcast)
 {
-  round: 3,
+  round: 3,                     // тут поле саме `round` (на відміну від roundResult)
   mode: "QUESTION" | "NUMBER" | "CHRONO" | "MAP",
   question: { ... },            // локалізоване ТВОЄЮ мовою; правильної відповіді тут НЕМА
-  deadline: 1785519999999,      // unix ms
-  durationMs: 30000,
+  deadline: 1785519999999,      // АБСОЛЮТНІ unix ms; раунд може закритись і раніше —
+                                // щойно відповіли всі живі онлайн-гравці
+  durationMs: 20000,
   activePlayers: ["id1", ...]
 }</code></pre>
+  <p class="caption">Кожен <code>question</code> у будь-якому режимі несе <code>id</code>,
+  <code>mode</code>, <code>text</code> і <code>deadline</code>. Поле
+  <code>localizations</code> зрізається персонально під мову адресата, правильна відповідь —
+  до відправки.</p>
 
   <div class="scroll-x"><table>
     <thead><tr><th>Режим</th><th>Питання містить</th><th>Відповідь — <code>submitAnswer([...])</code></th><th>Хто вибуває</th></tr></thead>
     <tbody>
-      <tr><td>QUESTION</td><td><code>options: [текст, ...]</code></td><td><code>{type:'selection', optionId: 2}</code></td><td>усі, хто неправильно / не встиг</td></tr>
-      <tr><td>NUMBER</td><td>текст (числова оцінка)</td><td><code>{type:'number', value: 1492}</code></td><td>найгірша група за відхиленням</td></tr>
-      <tr><td>CHRONO</td><td><code>facts: [{id, text}, ...]</code> перемішані</td><td><code>{type:'chrono', order: [id3, id1, id2]}</code> — від найранішого</td><td>усі, хто помилився в порядку</td></tr>
-      <tr><td>MAP</td><td>текст («Покажи місто X»)</td><td><code>{type:'map', lat: 50.45, lng: 30.52}</code></td><td>найгірша група за відстанню</td></tr>
+      <tr><td>QUESTION</td><td><code>options: [{id, text}, …]</code> — <b>обʼєкти, не рядки</b>; <code>id</code> = індекс</td><td><code>{type:'selection', optionId: 2}</code> — <code>optionId</code> має бути цілим, інакше відповідь відхилена</td><td>усі, хто неправильно / не встиг. Якщо <b>ВСІ</b> відповіли правильно — вибуває найповільніша група (рангова, за спід-бонусом), а якщо в ній &gt;1 гравця — раптовий тайбрейк. Якщо <b>ВСІ</b> помилились — тайбрейк, після нього лишається лише найкраща за рангом група</td></tr>
+      <tr><td>NUMBER</td><td>текст (числова оцінка)</td><td><code>{type:'number', value: 1492}</code> — нескінченне/NaN <code>value</code> відхиляється і рахується як «не відповів»</td><td><b>плаваюча дельта</b>: раунд лишає 70% когорти, останній збережений гравець задає поріг <code>roundDelta</code>; хто промахнувся більше — вибуває</td></tr>
+      <tr><td>CHRONO</td><td><code>events: [{id, text}, …]</code> у порядку показу <b>+</b> <code>years: number[]</code> — <b>ПЕРЕМІШАНІ</b> роки</td><td><code>{type:'chrono', pairs:[2,0,3,1]}</code> — <code>pairs[i]</code> це <b>ІНДЕКС у масиві <code>years</code></b> для <code>events[i]</code>; <code>-1</code> = не спаровано</td><td>лише ті, хто спарував неправильно. Якщо всі спарували повністю правильно — <b>НЕ вибуває НІХТО</b>, тайбрейку немає, одразу наступний раунд. Якщо ж помилились <b>усі</b>, лоббі не вибиває себе повністю: лишається група з найкращим відсотком</td></tr>
+      <tr><td>MAP</td><td>текст («Покажи місто X»)</td><td><code>{type:'map', lat: 50.45, lng: 30.52}</code> — нескінченні координати відхиляються</td><td>та сама <b>плаваюча дельта</b>. Тут <code>roundDelta</code> і <code>err</code> — кілометри, а мітка <code>correct</code> (&lt;50 км) на вибування <b>не впливає</b></td></tr>
     </tbody>
   </table></div>
 
+  <div class="note warn">
+    <p><strong>CHRONO: коли відповідь відхиляється.</strong></p>
+    <p>Сервер відкидає пару, якщо <code>pairs</code> не масив, його довжина ≠ кількості
+      <code>events</code>, є нецілий елемент, індекс поза <code>[-1, years.length-1]</code>
+      або <b>один індекс року використано двічі</b> (<code>-1</code> повторювати можна).
+      Причина проста: рік, відданий двом подіям, — це не спарування, а зарахування його двічі
+      дало б більше балів, ніж питання може видати.</p>
+    <p>Відхилена відповідь рахується як «не відповів»: <code>score 0</code>,
+      <code>correct false</code> — хоча RPC уже повернув <code>{ok:true}</code>, а сире тіло
+      відповіді все одно приїде назад у <code>scores[].answer</code>. Старий формат
+      <code>{type:'chrono', order:[…]}</code> відхиляється саме цією перевіркою.</p>
+    <p>Бал CHRONO = частка правильно спарованих подій × 100, округлено. Спід-бонусу тут
+      <b>немає</b> — тому кожен, хто спарував усе, тримає рівно 100 і ділить 1-й ранг; інакше
+      гравця вибивало б за те, що він клікнув останнім із бездоганною відповіддю.
+      <code>correct: true</code> лише при 100% спаруванні.</p>
+  </div>
+
+  <div class="note">
+    <p><strong>Плаваюча дельта (MAP / NUMBER) — як саме ріжеться раунд.</strong></p>
+    <p>Поріг не конфігурується, його породжує поле: раунд сортує когорту за промахом, лишає
+      <code>keep = min(max(1, round(n × 0.7)), n − 1)</code> гравців, і <b>останній збережений</b>
+      задає толерантність <code>roundDelta</code>. Хто строго всередині — виживає, хто строго
+      зовні — вибуває. Обидва обмеження — це гарантія «ніколи не порожньо»: щонайменше один
+      гравець завжди виживає і щонайменше один завжди вибуває.</p>
+    <p>Числа з коду: 3 гравці → лишається 2; 2 гравці → чистий вирішальний раунд
+      (<code>round(3×0.7)=2</code>, <code>round(2×0.7)=1</code>). Далі: 4→3, 5→4, 6→4, 8→6,
+      10→7, 16→11, 20→14, 64→45.</p>
+    <p>Хто не відповів (або відповів невалідно) має <code>err = Infinity</code> — найгірший
+      можливий промах, тож потрапляє в розріз без окремої гілки.</p>
+    <p>Рівність <b>точно на порозі</b>, коли на межі більше гравців, ніж лишилось місць за нею,
+      → раптовий тайбрейк: цього проходу не вибуває <b>ніхто</b>, а
+      <code>tiebreakPlayerIds</code> = саме ті, хто на межі. Після тайбрейку місця на межі
+      розподіляються за рангом, решта вибуває разом із тими, хто вже був зовні.</p>
+  </div>
+
   <pre class="block"><code>// roundResult (broadcast)
-{ round, scores: [{playerId, score, ...}], eliminated: ["id", ...],
-  correct: 2 | 1492 | [50.45, 30.52] | [id1, id2, id3] }   // формат залежить від режиму</code></pre>
+{
+  roundNumber: 3,               // УВАГА: тут `roundNumber`, а не `round` — це ЄДИНА подія бою
+                                // з такою назвою поля
+  mode: "QUESTION" | "NUMBER" | "CHRONO" | "MAP",
+  scores: [ { playerId, score, correct, rank, answer, err? } ],
+  eliminated: ["id", ...],
+  correctAnswer: 2 | 1492 | [50.45, 30.52] | [2, 0, 3, 1],  // НЕ `correct`; формат за режимом
+  tiebreakPlayerIds?: ["id", ...],
+  roundDelta?: 812.4,
+  nextRoundAt?: 1785520014999   // АБСОЛЮТНІ epoch ms
+}</code></pre>
+  <p class="caption"><code>correctAnswer</code> по режимах: QUESTION → <code>correctOptionId</code>
+  (число); MAP → <code>[lat, lng]</code>; NUMBER → саме значення; CHRONO →
+  <code>number[]</code> <b>індексів у масиві <code>years</code></b>, який payload уже привіз
+  (<code>correctAnswer[i]</code> для <code>events[i]</code>) — це не порядок подій.</p>
+
+  <div class="note">
+    <p><strong>Що означає ВІДСУТНІСТЬ поля — саме на цьому клієнти й ловляться.</strong></p>
+    <p><code>tiebreakPlayerIds</code> немає → раптового тайбрейку не було. Коли є — це
+      <b>початкова</b> спірна група з першого проходу, а не ті, хто лишався в нічиї наприкінці.</p>
+    <p><code>roundDelta</code> немає → або це QUESTION/CHRONO (у режиму просто немає промаху),
+      або поріг виявився нескінченним: розріз припав на «не відповів», і читабельного порогу
+      не існує.</p>
+    <p><code>nextRoundAt</code> немає → наступного раунду <b>НЕ БУДЕ</b> (лишився один гравець
+      або досягнуто стелі). Не малюй відлік — чекай <code>fightFinished</code> /
+      <code>lobbyFinished</code>. Коли раунд відкрив вікно викупу, <code>nextRoundAt</code>
+      <b>дорівнює</b> <code>buybackWindowOpen.closesAt</code> — це один момент під двома
+      іменами, двох таймерів не заводь.</p>
+    <p><code>err</code> немає в рядку → це QUESTION/CHRONO. <code>err: null</code> → гравець не
+      відповів або відповів невалідно: JSTP серіалізує через <code>JSON.stringify</code>, а той
+      везе <code>Infinity</code> як <code>null</code>. Читай це як <b>найгірший можливий
+      промах</b>, а не як «поля немає».</p>
+    <p><code>answer</code> є <b>завжди</b> — сире тіло того, що гравець надіслав, або
+      <code>null</code>, якщо не відповів. <code>scores</code> уже відсортовані за рангом
+      (1-й перший), ранги «змагальні»: 1, 1, 3.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong><code>eliminated</code> не є остаточним у момент отримання.</strong></p>
+    <p>Сервер надсилає його <b>ДО</b> фактичного вибування в лоббі, і поки триває вікно викупу
+      (яке дорівнює паузі до наступного раунду) ці гравці ще можуть повернутись. Масив може
+      бути й порожнім — на раунді, який нікого не розділив.</p>
+  </div>
 
   <div class="note">
     <p><strong>Дві деталі, які легко проґавити.</strong></p>
     <p>Раунд закривається <b>достроково</b>, щойно відповіли всі живі онлайн-гравці — дедлайн у UI
-      не гарантований час.</p>
-    <p>Нічия в MAP/NUMBER розвʼязується тайбрейком (<code>tiebreakStarted</code> /
-      <code>tiebreakResult</code>): додаткове NUMBER-питання лише для учасників нічиєї, максимум
-      5 спроб, далі детермінований розрив.</p>
+      не гарантований час. Якщо всі офлайн, раунд навпаки догорає до дедлайну. Відповідь одна
+      на раунд: другий <code>submitAnswer</code> отримає «Answer rejected», змінити відповідь
+      не можна.</p>
+    <p>Нічия можлива в <b>будь-якому</b> режимі, не лише MAP/NUMBER. Додаткове питання йде за
+      режимом раунду: після MAP це MAP-питання («хто ближче»), після QUESTION / CHRONO / NUMBER —
+      NUMBER-питання («хто точніше»). Максимум 5 ітерацій, далі детермінований розрив
+      (бал → швидкість відповіді → менший <code>playerId</code>), щоб раунд завжди завершився.
+      Раптовий тайбрейк <b>не коштує тікета</b>, а його результат вкладається в бали раунду
+      піддробовою добавкою — підняти когось вище за гравця з кращим балом він не може.</p>
   </div>
 </section>
 
 <section>
   <h2><span class="num">7</span> Викуп (BuyBack)</h2>
   <p class="sub">
-    Після вибування — 15-секундне вікно. Броадкаст <code>buybackWindowOpen</code> цін <b>не несе</b>:
-    ціна персональна (залежить від твоїх спроб), тому приходить <b>приватною</b> подією.
+    Після вибування — 15-секундне вікно, яке йде <b>ПАРАЛЕЛЬНО</b> з паузою між раундами:
+    <code>buybackWindowOpen.closesAt</code> === <code>roundResult.nextRoundAt</code>, це один
+    і той самий момент. Наступний раунд стартує саме тоді, і гравець вважається остаточно
+    вибулим лише коли цей таймер спливе. Броадкаст <code>buybackWindowOpen</code> цін
+    <b>не несе</b>: ціна персональна (залежить від твоїх спроб), тому приходить
+    <b>приватною</b> подією.
   </p>
+
+  <pre class="block"><code>// buybackWindowOpen (broadcast)
+{ round: 4, eliminatedIds: ["id1","id2"], windowMs: 15000, closesAt: 1785520014999 }
+// buybackWindowClosed (broadcast)
+{ round: 4 }</code></pre>
+
+  <div class="note">
+    <p><strong>Коли вікна не буде взагалі.</strong></p>
+    <p>(1) після раунду лишився ≤1 живий; (2) досягнута стеля раундів; (3) поріг «замало
+      гравців» усе одно не пустив би (живих після вибувань ≤ порогу) — таке вікно відкрилось би
+      вже відмовним і 15 секунд відмовляло б усім; (4) з раунду не вибув жоден живий
+      гравець-<b>людина</b> (лише боти).</p>
+    <p>У цих випадках у <code>roundResult</code> усе одно є <code>nextRoundAt</code> (крім
+      випадку, коли бій закінчується), а пауза — звичайні 10 с, або 15 с після MAP.</p>
+  </div>
+
+  <div class="note">
+    <p><strong><code>buybackWindowClosed</code> означає «всі викупи вже проведені».</strong></p>
+    <p>На <code>closesAt</code> сервер спершу закриває шлюз, потім <b>дочікується</b> списань,
+      що вже пішли на main-server, і лише тоді шле подію. Тому вона може прийти на пів секунди
+      пізніше за <code>closesAt</code>, а <code>roundStarted</code> іде одразу за нею (плюс час
+      на добування питання) — не розраховуй, що раунд стартує рівно в мілісекунду
+      <code>closesAt</code>.</p>
+    <p>Зворотний бік тієї самої властивості: тап, зроблений за мить до <code>closesAt</code>,
+      чиє списання прийнялось, <b>усе одно повертає в бій</b> — тікети вже витрачені, тож
+      сервер на нього чекає.</p>
+  </div>
 
   <pre class="block"><code>// buyBackOffer — ПРИВАТНА подія, лише вибулому
 {
@@ -522,8 +766,22 @@ stateDiagram-v2
   unavailableReason?: "buyback_too_few_players"   // лише коли cost === null
 }</code></pre>
 
+  <p class="caption"><code>closesAt</code> тут — той самий момент, що
+  <code>roundResult.nextRoundAt</code>. Оффер можуть <b>переслати всередині вікна</b>: після
+  чужого вдалого викупу живих стає більше і поріг «замало гравців» може відпустити, тому
+  завжди застосовуй <b>останній</b> отриманий оффер, а не перший.</p>
+
   <p>Викуп: <code>buyBack([])</code> → <code>{ cost }</code>. Показана ціна завжди дорівнює
-  списаній. Свіжа ціна поза подією (напр., після реконекта): <code>getBuyBackQuote([])</code>.</p>
+  списаній. Свіжа ціна поза подією (напр., після реконекта): <code>getBuyBackQuote([])</code> →
+  <code>{ cost, attempt, maxUses, affordable, balance, unavailableReason? }</code> — ті самі
+  числа, що в оффері, мінус <code>round</code>/<code>closesAt</code>. Квота read-only: спроби
+  не витрачає, тікетів не рухає, гейти застосовує ті самі, що й списання.</p>
+  <p>Окрім машинного тега, <code>buyBack([])</code> може відповісти <b>«Lobby has ended»</b>
+  (лоббі цього сокета вже закінчилось — сигнал скинути сцену, §3) або <b>«No active fight»</b>
+  (лоббі не в <code>ACTIVE</code>). Ці дві — <b>без</b> приватної події: сокет відсіюють раніше,
+  ніж лоббі встигає щось надіслати. Решта відмов, ті що з машинним тегом, дублюються
+  приватною подією <code>buyBackDenied {playerId, reason}</code> з тим самим тегом. Невдала чи відмовлена спроба
+  <b>не спалює спробу</b> — <code>attempt</code> у наступній квоті той самий.</p>
 
   <h3>Таблиця цін: база спроби × множник смуги раундів</h3>
   <div class="scroll-x"><table class="tabular">
@@ -536,7 +794,11 @@ stateDiagram-v2
       <tr><td>5-й</td><td>25</td><td>50</td><td>75</td></tr>
     </tbody>
   </table></div>
-  <p class="caption">Пізніші раунди тримають останній множник. Не кешуй ціну між раундами.</p>
+  <p class="caption">Пізніші раунди тримають останній множник. Ціна додатково обрізається до
+  <b>100 тікетів</b> — це ліміт однієї операції на main-server. Уся таблиця конфігурується через
+  <code>SURVIVAL_BUYBACK_FIXED_COSTS</code> / <code>_ROUND_BAND_SIZE</code> /
+  <code>_ROUND_MULTIPLIERS</code> / <code>_MAX_USES</code>, тож не хардкодь її в клієнті: бери
+  <code>cost</code> з оффера або з <code>getBuyBackQuote</code>. Не кешуй ціну між раундами.</p>
 
   <h3>Причини відмови (RPC-помилка і приватна подія <code>buyBackDenied</code> — той самий тег)</h3>
   <div class="scroll-x"><table>
@@ -547,10 +809,32 @@ stateDiagram-v2
       <tr><td><code>buyback_attempts_exhausted</code></td><td>Спроби вичерпані (5 за матч)</td></tr>
       <tr><td><code>buyback_too_few_players</code></td><td>Залишилось замало гравців</td></tr>
       <tr><td><code>player_not_eliminated</code></td><td>Ти не вибув</td></tr>
-      <tr><td><code>buyback_in_progress</code></td><td>Подвійний тап — викуп уже виконується</td></tr>
+      <tr><td><code>buyback_in_progress</code></td><td>Подвійний тап — викуп уже виконується (JSTP конвеєризує виклики, тож без цього гейта два тапи списали б дві різні ціни за одне повернення)</td></tr>
+      <tr><td><code>buyback_not_available</code></td><td>Для цієї спроби немає ціни — помилка конфігу; показуй як «викуп недоступний»</td></tr>
+      <tr><td><code>wallet_unavailable</code></td><td>Гаманець не відповів — дай ретрай</td></tr>
+      <tr><td><code>lobby_not_active</code></td><td>Бій уже не йде</td></tr>
+      <tr><td><code>buyback_error</code></td><td>Внутрішня помилка сервера</td></tr>
+      <tr><td><code>not_registered</code> / <code>bots_cannot_buy_back</code></td><td>Для реального клієнта недосяжні, але теги існують у тому самому union</td></tr>
       <tr><td>інший тег</td><td>показуй як є, не ковтай — це діагностика</td></tr>
     </tbody>
   </table></div>
+  <p class="caption">Квота (<code>getBuyBackQuote</code>) звужена до тих причин, які видно ще
+  до руху тікетів: <code>lobby_not_active</code>, <code>player_not_eliminated</code>,
+  <code>buyback_window_closed</code>, <code>bots_cannot_buy_back</code>,
+  <code>not_registered</code> плюс чотири гаманцеві —
+  <code>buyback_attempts_exhausted</code>, <code>buyback_too_few_players</code>,
+  <code>buyback_not_available</code>.</p>
+
+  <h3>Поріг «замало гравців»</h3>
+  <p>Викуп відмовляється, поки <b>живих ≤ поріг</b>, де
+  <code>поріг = max(minPlayers, ceil(minPlayersPercent / 100 × стартовий склад))</code> —
+  більше з абсолютної підлоги і частки стартового складу. Стартовий склад заморожується на
+  <code>fightStarted</code> і рахує ботів.</p>
+  <p>Конфіг береться з набору дня (поле <code>buyback</code>), інакше з
+  <code>SURVIVAL_BUYBACK_MIN_PLAYERS_REQUIRED</code> /
+  <code>SURVIVAL_BUYBACK_MIN_PLAYERS_PERCENT</code>, інакше — вшитий дефолт
+  <code>{minPlayers: 4, minPlayersPercent: 0}</code>. З дефолтами вікно взагалі не відкриється,
+  якщо після вибувань живих ≤ 4, тобто відкривається лише поки лишається ≥5.</p>
 </section>
 
 <section>
@@ -567,15 +851,16 @@ stateDiagram-v2
   <b>налаштовується редактором</b>: дефолт для нових сетів — на сторінці конфігурації фабрики,
   конкретний день — на сторінці сета. Дефолт: 1-ше місце 100💎+10🎟, 2-ге 25💎+5🎟,
   3-тє 10💎+2🎟, 4–8 — по 1🎟. Для дня без сета survival-server бере вшиту дефолтну таблицю.</p>
-  <pre class="block"><code>// у payload lobbyFinished (broadcast)
-rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
+  <pre class="block"><code>// у payload lobbyFinished (broadcast) — ДВА масиви
+rewards:     [ { playerId, rank, gems, tickets }, … ]   // що ВИПЛАЧЕНО кожному ГРАВЦЮ
+rewardTable: [ { gems, tickets }, … ]                   // що платить кожне МІСЦЕ, індекс 0 = 1-ше</code></pre>
   <div class="scroll-x"><table>
     <thead><tr><th>Правило</th><th>Що це означає для клієнта</th></tr></thead>
     <tbody>
-      <tr><td>Ранг — загальне фінальне місце</td><td>боти теж займають ранги, але <b>виплат не отримують</b>; у масиві лише живі гравці, нульові рядки пропущені</td></tr>
+      <tr><td>Ранг — загальне фінальне місце</td><td>боти теж займають ранги, але <b>виплат не отримують</b>; у <code>rewards</code> лише люди, нульові рядки пропущені. Щоб підписати ранг бота, бери <code>rewardTable</code> — вона каже, що платить кожне місце незалежно від того, кому воно дісталось</td></tr>
       <tr><td>Рахує survival-server, платить main-server</td><td>масив у <code>lobbyFinished</code> — це і є фінальний лідерборд; малюй його як є, нічого не перераховуй</td></tr>
       <tr><td>Виплата асинхронна</td><td><code>ticketsUpdated</code> із survival-server <b>не прийде</b> — виплата йде на main-server після бою; баланс онови через <code>beG.getTickets()</code> з невеликою затримкою</td></tr>
-      <tr><td>Старий сервер</td><td>без масиву <code>rewards</code> діє легасі-схема (50 золота учасникам, 20 гемів переможцю) — відсутність поля не помилка</td></tr>
+      <tr><td>Старий сервер</td><td>без масиву <code>rewards</code> діє легасі-схема (20 гемів переможцю) — відсутність поля не помилка. 50 золота кожному живому учаснику нараховуються <b>завжди</b>, на обох шляхах</td></tr>
       <tr><td>Скасоване лоббі</td><td><code>lobbyCancelled</code> нагород не несе ніколи</td></tr>
     </tbody>
   </table></div>
@@ -586,26 +871,42 @@ rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
   <div class="scroll-x"><table>
     <thead><tr><th>Подія</th><th>Кому</th><th>Ключове в payload</th></tr></thead>
     <tbody>
-      <tr><td><code>playerJoined</code> / <code>playerLeft</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, totalPlayers</code> (у <code>playerJoined</code> ще й <code>name</code>); слідом сервер сам шле <code>rosterUpdate</code></td></tr>
+      <tr><td><code>playerJoined</code> / <code>playerLeft</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, totalPlayers</code> (у <code>playerJoined</code> ще й <code>name</code>); слідом сервер сам шле <code>rosterUpdate</code>. <b>Боти приходять цією ж подією</b> — і посів на старті онбордингу, і присипка за кожною реєстрацією людини. А от кінцевий добір ботів <code>playerJoined</code> НЕ емітить: ті боти приїжджають лише всередині <code>rosterUpdate</code>, який тригерить <code>fightStarted</code></td></tr>
       <tr><td><code>playerReady</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, name, readyCount, humanCount</code> — <b>без</b> <code>totalPlayers</code>; слідом іде <code>rosterUpdate</code></td></tr>
-      <tr><td><code>rosterUpdate</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, state, playerCount, activePlayerCount, roster</code> — склад завжди повний, не діф</td></tr>
-      <tr><td><code>onboardingStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>durationMs, players, readyCount</code>. <b>Ростера тут немає</b>, а <code>players</code> — ЧИСЛО; і <code>rosterUpdate</code> слідом за цією подією <b>не</b> йде, тож склад тримай той, що вже маєш</td></tr>
+      <tr><td><code>rosterUpdate</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, state, playerCount, activePlayerCount, roster</code> — склад завжди повний, не діф. Подія склеюється (<code>setImmediate</code>): пачка вибувань дає <b>ОДИН</b> <code>rosterUpdate</code>, а не по одному на гравця</td></tr>
+      <tr><td><code>onboardingStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>durationMs, closesAt, players, readyCount</code>. <code>closesAt</code> — АБСОЛЮТНІ epoch ms, саме від нього рахується відлік. <b>Ростера тут немає</b>, а <code>players</code> — ЧИСЛО; <code>rosterUpdate</code> за цією подією <b>не</b> йде — але одразу за нею прилітають <code>playerJoined</code> посіяних ботів, і вже вони його тригернуть</td></tr>
       <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, players: [{playerId, slot, isBot}]</code> — це урізаний список, не рядки ростера. Повний склад із ботами і слотами прилітає окремим <code>rosterUpdate</code>, який ця подія тригерить</td></tr>
-      <tr><td><code>roundStarted</code> / <code>answerReceived</code> / <code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td>див. §6; <code>answerReceived</code> — лише <code>playerId</code>, без відповіді</td></tr>
-      <tr><td><code>tiebreakStarted</code> / <code>tiebreakResult</code></td><td><span class="tag bcast">лоббі</span></td><td>учасники нічиєї, питання / результат</td></tr>
+      <tr><td><code>roundStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, mode, question, deadline, durationMs, activePlayers</code> (§6)</td></tr>
+      <tr><td><code>answerReceived</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — самої відповіді немає</td></tr>
+      <tr><td><code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roundNumber</code> (<b>НЕ</b> <code>round</code>), <code>mode, scores, eliminated, correctAnswer</code> (<b>НЕ</b> <code>correct</code>) + опційні <code>tiebreakPlayerIds</code>, <code>roundDelta</code>, <code>nextRoundAt</code> (§6)</td></tr>
+      <tr><td><code>tiebreakStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, mode, playerIds, question, durationMs</code>. Дедлайн лише всередині <code>question.deadline</code> — top-level <code>deadline</code> тут <b>НЕМА</b></td></tr>
+      <tr><td><code>tiebreakResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, mode, correctAnswer, scores</code>; при детермінованому розриві натомість <code>round, mode, resolvedBy:"deterministic", playerIds, scores</code> — без <code>iteration</code>, без <code>correctAnswer</code>, і в цих <code>scores</code> немає поля <code>answer</code></td></tr>
       <tr><td><code>playerEliminated</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
-      <tr><td><code>buybackWindowOpen</code> / <code>buybackWindowClosed</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, windowMs, closesAt</code> — без цін</td></tr>
-      <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code> / <code>ticketsUpdated</code></td><td><span class="tag private">приватні</span></td><td>див. §7–8; завжди несуть <code>playerId</code> адресата — звіряй зі своїм</td></tr>
+      <tr><td><code>buybackWindowOpen</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, windowMs, closesAt</code> — без цін. <code>closesAt</code> <b>дорівнює</b> <code>roundResult.nextRoundAt</code>: вікно викупу і є паузою перед наступним раундом</td></tr>
+      <tr><td><code>buybackWindowClosed</code></td><td><span class="tag bcast">лоббі</span></td><td>лише <code>round</code> — і означає «всі викупи вже проведені» (§7)</td></tr>
+      <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code></td><td><span class="tag private">приватні</span></td><td>див. §7; завжди несуть <code>playerId</code> адресата — звіряй зі своїм. <code>buyBackDenied</code> — <code>{playerId, reason}</code></td></tr>
+      <tr><td><code>ticketsUpdated</code></td><td><span class="tag private">приватна</span></td><td><code>{playerId, balance, reason, delta?}</code> (§8). Адресується <b>по <code>playerId</code></b>, не по лоббі; <code>delta</code> просто <b>відсутнє</b>, коли рух нульовий або невідомий</td></tr>
       <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — ціни нема (гаманець гравця)</td></tr>
-      <tr><td><code>playerDisconnected</code> / <code>playerReconnected</code></td><td><span class="tag bcast">лоббі</span> / <span class="tag private">приватна</span></td><td>реконект несе стан для відновлення UI</td></tr>
-      <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId, totalRounds, rewards: [{playerId, rank, gems, tickets}]</code> — фінальний лідерборд із виплатами (§8); плюс 50 золота кожному учаснику від main-server</td></tr>
-      <tr><td><code>lobbyCancelled</code> / <code>fightError</code></td><td><span class="tag bcast">лоббі</span></td><td>аварійні; <code>fightError.reason</code> — напр. <code>round_cap_reached</code></td></tr>
+      <tr><td><code>playerDisconnected</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
+      <tr><td><code>playerReconnected</code></td><td><span class="tag private">приватна</span></td><td><code>playerId, round, state, question?, deadline?, answered?</code> — три останні лише коли для гравця відкрите питання. Іде <b>лише тому, хто перепідключився</b>, на відміну від <code>playerDisconnected</code></td></tr>
+      <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId, totalRounds, rewards: [{playerId, rank, gems, tickets}], rewardTable: [{gems, tickets}, …]</code>. <code>rewards</code> — що реально виплачено кожному ГРАВЦЮ (лише люди), <code>rewardTable</code> — що платить кожне МІСЦЕ (індекс 0 = 1-ше); саме таблиця дозволяє підписати ранг бота, якому виплат не буде (§8)</td></tr>
+      <tr><td><code>fightFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>fightId, winnerId, totalRounds, reason</code>, де <code>reason</code> ∈ <code>last_player_standing | question_pool_exhausted | round_cap_reached | lobby_closed</code>. Це <b>технічний</b> фініш бою — окрема подія від <code>lobbyFinished</code>, який є підсумком лоббі з виплатами; при звичайному фініші (<code>last_player_standing</code>) лоббі емітить свій <b>раніше</b>; на аварійних причинах порядок зворотний</td></tr>
+      <tr><td><code>lobbyCancelled</code></td><td><span class="tag bcast">лоббі</span></td><td>лише <code>{lobbyId}</code>; нагород не несе ніколи</td></tr>
+      <tr><td><code>fightError</code></td><td><span class="tag bcast">лоббі</span></td><td>три варіанти: <code>{reason:"round_cap_reached", maxRounds}</code>, <code>{reason:"question_pool_exhausted", round}</code>, <code>{reason:"question_preload_failed"}</code></td></tr>
     </tbody>
   </table></div>
   <p class="caption">Рядок ростера скрізь однаковий — у <code>rosterUpdate</code>, у відповідях
   <code>connect</code> і <code>getLobbyStatus</code>, у <code>beG.getSurvivalStatus</code>:
   <code>playerId, name, character, flag, clan, isBot, slot, eliminated, eliminatedAtRound, ready</code>
   (§2). Пиши на нього один парсер і один рядок UI.</p>
+  <div class="note">
+    <p><strong>Два наскрізні правила каталогу.</strong></p>
+    <p>Події доходять <b>лише</b> до сокетів, привʼязаних до ЦЬОГО лоббі. Після завершення лоббі
+      сокет не отримує нічого і на будь-який RPC відповідає «Lobby has ended» (§3).</p>
+    <p>Будь-який payload із полем <code>question</code> уже локалізований мовою гравця:
+      підміняються <code>question.text</code> і тексти всередині <code>options</code> та
+      <code>events</code>. Поля <code>localizations</code> клієнт не бачить ніколи.</p>
+  </div>
 </section>
 
 <section>
@@ -613,10 +914,13 @@ rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
   <div class="scroll-x"><table>
     <thead><tr><th>Хочу…</th><th>Виклик</th><th>Куди</th></tr></thead>
     <tbody>
-      <tr><td>Хто записався (до входу)</td><td><code>beG.getSurvivalStatus()</code></td><td>main-server</td></tr>
+      <tr><td>Хто записався (до входу)</td><td><code>beG.getSurvivalStatus()</code></td><td>main-server — сюди ж тепер приходить <code>joinable</code>, гейт перед <code>joinSurvival</code></td></tr>
       <tr><td>Зайти в режим</td><td><code>beG.joinSurvival()</code></td><td>main-server</td></tr>
+      <tr><td>Вийти з режиму (забути оплачений вхід)</td><td><code>beG.leaveSurvival()</code></td><td>main-server — тікет <b>не</b> повертається</td></tr>
       <tr><td>Баланс (довідково)</td><td><code>beG.getTickets()</code></td><td>main-server</td></tr>
-      <tr><td>Підтвердити себе</td><td><code>survival.connect([token])</code></td><td>survival-server</td></tr>
+      <tr><td>Тікети для розробки</td><td><code>beG.grantDevTickets(amount)</code></td><td>main-server — лише при <code>NODE_ENV=development</code>, нараховує тільки тому, хто викликав</td></tr>
+      <tr><td>Підтвердити себе</td><td><code>survival.connect([token])</code></td><td>survival-server — відповідь може нести <code>lastResult</code>, фінальну дошку щойно завершеного матчу</td></tr>
+      <tr><td>Матч скінчився → зайти знову</td><td><code>beG.joinSurvival()</code> + <code>survival.connect([новий token])</code></td><td>старий токен мертвий; кожен RPC старого сокета відповідає «Lobby has ended»</td></tr>
       <tr><td>Я готовий</td><td><code>survival.ready([])</code></td><td>survival-server</td></tr>
       <tr><td>Відповісти</td><td><code>survival.submitAnswer([answer])</code></td><td>survival-server</td></tr>
       <tr><td>Ціна викупу зараз</td><td><code>survival.getBuyBackQuote([])</code></td><td>survival-server</td></tr>
@@ -643,17 +947,59 @@ rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
       10 хв і коштує тікет; список учасників до входу дає <code>beG.getSurvivalStatus</code> (§2).</li>
     <li><b><code>clan</code> — це назва, а не id.</b> Резолвити нічого не треба, показуй як є;
       <code>""</code> означає «без клану» (і так завжди у ботів) — тоді плашки просто немає.</li>
+    <li><b>Боти є вже на екрані бронювання.</b> Не будуй логіку на припущенні, що в
+      <code>BOOKING</code> усі <code>isBot: false</code>: 1–3 боти сідають за кожною
+      реєстрацією людини (шанс 50%), ще 3–4 — у мить відкриття онбордингу. І не використовуй
+      порожній <code>flag</code> як ознаку бота — у ботів тепер реальна випадкова країна.
+      Єдина ознака — <code>isBot</code>.</li>
+    <li><b>CHRONO більше не порядок, а спарування.</b> Питання несе <code>events</code> ТА
+      перемішані <code>years</code>, відповідь — <code>{type:'chrono', pairs:[…]}</code>, де
+      <code>pairs[i]</code> це індекс у <code>years</code>. Старий
+      <code>{type:'chrono', order:[…]}</code> сервер відхилить, RPC при цьому поверне
+      <code>{ok:true}</code>, а гравець отримає 0 і вибуде — мовчазна поразка, тому цю пастку
+      треба ловити на етапі парсера.</li>
+    <li><b><code>roundResult.roundNumber</code>, а не <code>round</code>; правильна відповідь —
+      <code>correctAnswer</code>, а не <code>correct</code>.</b> Старі назви були в цій самій
+      доці й перекочували в клієнтські парсери; <code>roundResult</code> — єдина подія бою,
+      де номер раунду називається інакше.</li>
+    <li><b><code>closesAt</code> і <code>nextRoundAt</code> — той самий момент.</b> Не заводь
+      два таймери: вікно викупу <b>і є</b> паузою перед наступним раундом. Між раундами єдине
+      джерело відліку — <code>roundResult.nextRoundAt</code> (абсолютні epoch ms). Якщо
+      <code>nextRoundAt</code> немає — раунду не буде, чекай <code>fightFinished</code> /
+      <code>lobbyFinished</code>. А перед <b>ПЕРШИМ</b> раундом дедлайну не несе жодна подія:
+      після <code>fightStarted</code> просто буде ~10 с тиші.</li>
+    <li><b>«Lobby has ended» — це не поламана сесія, а команда перезапустити сцену.</b>
+      Повний скид і повторний вхід із новим токеном; ретраїти той самий виклик марно, бо старий
+      токен одноразовий і знищений разом із лоббі.</li>
+    <li><b>Повторний вхід після завершеного матчу коштує ще один тікет.</b> Наступне лоббі —
+      це інше лоббі; безкоштовний реконект діє лише в межах ТОГО САМОГО <code>lobbyId</code>
+      (або поки твоє місце видно в його ростері).</li>
+    <li><b>Не питай <code>joinSurvival</code>, коли <code>joinable:false</code> і
+      <code>registered:false</code>.</b> Виклик буде відбитий («No lobby is open for booking
+      right now»), гаманець не зрушить — але користувач побачить помилку замість зрозумілого
+      «матч уже йде».</li>
     <li><b>Підписка на події — до відповіді <code>connect</code></b>, інакше загубиш перший
       <code>ticketsUpdated</code>.</li>
     <li><b>Аргумент завжди один — масив.</b> <code>connect(token)</code> = «Invalid token»
       через перший символ рядка.</li>
     <li><b><code>closesAt</code> з оффера — справжній дедлайн</b>; рахуй відлік від нього,
-      а не від моменту отримання події.</li>
-    <li><b>Після реконекта</b> (<code>reconnected: true</code>) стан відновлюй з відповіді
-      <code>connect</code>, а ціну викупу перепитуй через <code>getBuyBackQuote</code>.</li>
+      а не від моменту отримання події. Оффер можуть переслати всередині вікна — застосовуй
+      останній, а не перший.</li>
+    <li><b><code>reconnected: true</code> означає лише «лоббі <code>ACTIVE</code> і бій іде».</b>
+      У <code>BOOKING</code>/<code>ONBOARDING</code> воно завжди <code>false</code>, навіть для
+      гравця, який уже в ростері. Стан бою відновлюй не з прапорця, а з приватного
+      <code>playerReconnected</code>, що прилітає слідом; ціну викупу перепитуй через
+      <code>getBuyBackQuote</code>.</li>
+    <li><b>Відлік онбордингу бери з <code>onboardingClosesAt</code></b> (відповіді
+      <code>connect</code> / <code>getLobbyStatus</code>) або з
+      <code>onboardingStarted.closesAt</code> — це абсолютні epoch ms.
+      <code>durationMs</code>, порахований від моменту отримання події, дає зсув для вкладки,
+      що підключилась усередині вікна.</li>
     <li><b>Помилки — в успішному колбеку</b> (<code>{error:{code,description}}</code>);
       транспортний error — лише мережа.</li>
-    <li><b>Обрив мережі ≠ вибування.</b> 30 с грейсу; вибути можна лише за результатом раунду.</li>
+    <li><b>Обрив мережі ≠ вибування — але грейсу немає взагалі.</b> Поки ти офлайн, раунди
+      йдуть, і кожен пропущений скориться як «немає відповіді»; вибути можна лише за
+      результатом раунду, а повернутись — будь-коли, поки живий.</li>
   </ol>
 </section>
 
@@ -661,8 +1007,10 @@ rewards: [ { playerId, rank, gems, tickets }, … ]</code></pre>
   Джерело істини — код гілки <code>SurvivalMode</code> і еталонний клієнт
   <a href="http://176.9.78.228:5500">176.9.78.228:5500</a>: його <code>web/src/survival.ts</code> —
   готовий редюсер усіх подій, який переноситься в C# майже один в один.
-  Історична примітка: цикл режимів <code>[Q,Q,CHRONO 25%,MAP]</code>, «раунд 15 завжди MAP» і плоскі
-  ціни викупу з ранніх версій цієї доки — застаріли; чинне описано вище.
+  Історична примітка: цикл режимів <code>[Q,Q,CHRONO 25%,MAP]</code> і плоскі ціни викупу з
+  ранніх версій цієї доки — застаріли; чинне описано вище. Правило «раунд 15 завжди MAP» діє
+  лише коли бій іде <b>без денного набору</b> (запасний селектор режимів); із набором режим
+  кожного раунду задає слот.
 </footer>
 
 </div>

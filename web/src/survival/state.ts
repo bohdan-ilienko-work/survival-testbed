@@ -36,6 +36,15 @@ export interface SurvivalState {
   mode?: RoundMode;
   question?: Question;
   deadline?: number;
+  /**
+   * ABSOLUTE unix ms when the next round starts — roundResult.nextRoundAt, the server's own
+   * instant, absolute for the same reasons as onboardingEndsAt above. On a round that opened a
+   * BuyBack window it EQUALS that window's closesAt — the window IS the between-rounds pause —
+   * and on a no-window round (≤1 active left, round cap reached, gate unpassable) it is the
+   * only pause countdown there is. Cleared on roundStarted: left standing it would keep a
+   * «наступний раунд через 0 с» ticking under the live question.
+   */
+  nextRoundAt?: number;
   myAnswer?: unknown;
   answeredCount: number;
   scores: Score[];
@@ -112,3 +121,17 @@ export const stepLabel: Record<Step, string> = {
   spectator: '8б. Вибув — режим глядача',
   finished: '10. Фінал',
 };
+
+/**
+ * The humans on a roster. Bots are in it from lobby open now (C2: `playerJoined` fires for
+ * "BOT_..." ids and rosterUpdate carries isBot rows from the first broadcast), so any counter
+ * that reads players.length is dominated by bots the moment the lobby seeds. One helper so
+ * every humans/bots split on screen is derived the same way; the id prefix is checked as well
+ * as the flag because a row from an event that predates `isBot` must not promote a bot to
+ * human, and playerId is typechecked because rows come off the wire uninspected.
+ */
+export const countHumans = (players: LobbyPlayer[]): number =>
+  players.filter(
+    (pl) =>
+      pl.isBot !== true && !(typeof pl.playerId === 'string' && pl.playerId.startsWith('BOT_')),
+  ).length;

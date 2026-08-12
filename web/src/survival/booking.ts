@@ -1,10 +1,13 @@
-// ─── the booking screen (beG.getSurvivalStatus) ───────────────────────────────
+// ─── the RPC replies (beG.getSurvivalStatus, survival.connect) ────────────────
 //
-// The two RPC replies the UI has to POLL rather than receive as events, and the types that
-// describe them. Their own file because they are not part of the event stream at all: the
-// booking popup is shown hours before the match, when there is no survival session to listen on.
+// The replies the UI has to ASK for rather than receive as events, and the types that describe
+// them. Their own file because they are not part of the event stream at all: the booking popup
+// is shown hours before the match, when there is no survival session to listen on, and the
+// connect reply is the one message a freshly bound socket gets about broadcasts it missed.
 
-import { asBool, asNum, asPlayers, asTag } from './guards';
+import { asBool, asLastResult, asNum, asPlayers, asTag } from './guards';
+import { initialState, type SurvivalState } from './state';
+import { NO_OFFER } from './wallet';
 import type { LobbyPlayer } from './wire';
 
 /**
@@ -38,6 +41,13 @@ export interface BookingStatus {
   available?: boolean;
   /** am I in THIS lobby — main-server matches its paid entry against the current lobbyId */
   registered?: boolean;
+  /**
+   * C4: may joinSurvival succeed right now? `false` while `registered` is also false means a
+   * match is RUNNING — joinSurvival will only refuse, so the screen should say «матч уже йде»
+   * (MATCH_IN_PROGRESS_TEXT) instead of calling it. `undefined` = an older main-server that
+   * never said; keep the legacy behaviour of simply trying the join.
+   */
+  joinable?: boolean;
   lobby: BookingLobby | null;
   tickets?: number;
   entryCost?: number;
@@ -84,6 +94,7 @@ export function readBookingStatus(reply: unknown): BookingStatus {
   return {
     available: asBool(r.available),
     registered: asBool(r.registered),
+    joinable: asBool(r.joinable),
     lobby,
     tickets: asNum(r.tickets),
     entryCost: asNum(r.entryCost),
@@ -115,4 +126,75 @@ export function readOnboardingClosesAt(reply: unknown): number | null | undefine
   const r = reply as Record<string, unknown>;
   if (!('onboardingClosesAt' in r)) return undefined;
   return r.onboardingClosesAt === null ? null : asNum(r.onboardingClosesAt);
+}
+
+/**
+ * Apply a survival.connect reply — the ONE reader for every shape it can take, so no hook
+ * merges its fields by hand (`?? st.X` fallbacks were exactly how a reply without a lobby
+ * left the previous, finished lobby standing on screen).
+ *
+ * `lastResult` (C3) wins over everything else — EXCEPT `reconnected:true`. The server attaches
+ * it independently of the current binding, so a player mid-fight in lobby B can reconnect with
+ * B's live fight AND A's fresh finish in one reply; the fight to resume outranks the board of
+ * a match that is over. Applied lastResult maps onto the SAME fields 'lobbyFinished' fills —
+ * including step 'finished', which arms the endgame balance re-read.
+ * Otherwise `lobbyId` is read three-way, same discipline as readOnboardingClosesAt above:
+ *   string    — a LIVE lobby: adopt its snapshot; the step is only promoted out of 'idle',
+ *               never demoted — a mid-fight step belongs to the round events that follow
+ *   null      — the server EXPLICITLY says no lobby exists: everything lobby-scoped we hold
+ *               is stale, so clear it and land on 'idle'
+ *   undefined — the reply does not say (older build / error shape): keep what we have
+ */
+export function applyConnectReply(state: SurvivalState, reply: unknown): SurvivalState {
+  const r: any = reply && typeof reply === 'object' ? reply : {};
+
+  const last = asLastResult(r.lastResult);
+  if (last && r.reconnected !== true) {
+    return {
+      ...state,
+      ...NO_OFFER,
+      buybackOpen: false,
+      step: 'finished',
+      lobbyId: last.lobbyId ?? state.lobbyId,
+      lobbyState: 'FINISHED',
+      players: last.roster ?? state.players,
+      winnerId: last.winnerId ?? null,
+      totalRounds: last.totalRounds ?? state.totalRounds,
+      rewards: last.rewards ?? state.rewards,
+      rewardTable: last.rewardTable ?? state.rewardTable,
+      // nothing is on-boarding and no round is coming — any of these instants would put a
+      // live countdown on the finish screen
+      onboardingEndsAt: undefined,
+      deadline: undefined,
+      nextRoundAt: undefined,
+    };
+  }
+
+  if ('lobbyId' in r && r.lobbyId === null) {
+    // the explicit "no lobby": back to the empty state, keeping only what belongs to the
+    // PLAYER (tickets live on main-server, not in the gone lobby) and the error line
+    return {
+      ...initialState,
+      tickets: state.tickets,
+      ticketsDelta: state.ticketsDelta,
+      ticketsReason: state.ticketsReason,
+      lastError: state.lastError,
+    };
+  }
+
+  const lobbyId = asTag(r.lobbyId);
+  if (lobbyId === undefined) return state;
+
+  const closesAt = readOnboardingClosesAt(r);
+  return {
+    ...state,
+    step: state.step === 'idle' ? 'lobby' : state.step,
+    lobbyId,
+    lobbyState: asTag(r.state) ?? state.lobbyState,
+    scheduledStartAt: asTag(r.scheduledStartAt) ?? state.scheduledStartAt,
+    players: asPlayers(r.roster, state.players),
+    // undefined = the server said nothing (old build) → keep ours; null = "not on-boarding",
+    // which has to CLEAR a deadline left over from a previous lobby
+    onboardingEndsAt: closesAt === undefined ? state.onboardingEndsAt : closesAt ?? undefined,
+  };
 }

@@ -4,7 +4,7 @@
 // They live together because every comment below is the same lesson learned on a different field,
 // and because the composite guards (asYears, asRewards) are built out of the scalar ones.
 
-import type { LobbyPlayer, RankReward, RewardRow } from './wire';
+import type { LastResult, LobbyPlayer, RankReward, RewardRow } from './wire';
 
 /**
  * Some events carry `players` as a COUNT (onboardingStarted) and others as a LIST
@@ -111,4 +111,27 @@ export const asRewards = (value: unknown): RewardRow[] | undefined => {
     });
   }
   return rows;
+};
+
+/**
+ * Read the connect reply's `lastResult` block (C3) — the finish snapshot for a tab that
+ * reloaded across the end of its match. Fields are guarded individually, absent → undefined,
+ * so a partly broken block still delivers what it can: the payouts matter more than the
+ * roster beside them. A non-object answers `undefined` — "no last result", which is the
+ * normal case for every connect outside the 120 s window after a finish.
+ */
+export const asLastResult = (value: unknown): LastResult | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const r = value as Record<string, unknown>;
+  return {
+    lobbyId: asTag(r.lobbyId),
+    finishedAt: asNum(r.finishedAt),
+    winnerId: asTag(r.winnerId),
+    totalRounds: asNum(r.totalRounds),
+    rewards: asRewards(r.rewards),
+    rewardTable: asRewardTable(r.rewardTable),
+    // same rule as asPlayers: a non-array roster is "no roster", never a crash — but here
+    // the absence must stay visible, so there is no fallback array to hide it behind
+    roster: Array.isArray(r.roster) ? (r.roster as LobbyPlayer[]) : undefined,
+  };
 };

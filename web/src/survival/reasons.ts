@@ -71,6 +71,25 @@ export function reasonWithTag(reason?: unknown): string {
 }
 
 /**
+ * C3: a socket whose lobby ENDED answers EVERY RPC with { code: 0, description: "Lobby has
+ * ended" } — the deliberate scene-reset signal, not a failure. Matched loosely (case,
+ * surrounding words) so a rephrase on the server degrades to showing the raw prose, never to
+ * mistaking some other error for a scene reset.
+ */
+export const isLobbyEnded = (message?: unknown): boolean =>
+  typeof message === 'string' && /lobby has ended/i.test(message);
+
+/** The face of that signal — what the player reads while the testbed resets the scene. */
+export const LOBBY_ENDED_TEXT = 'Лобі завершилося — повертаємось у меню';
+
+/**
+ * C4: getSurvivalStatus answered joinable=false with registered=false — a match is running
+ * and joinSurvival would only refuse. One constant so the booking screen and the join flow
+ * name the same reason instead of each wording its own.
+ */
+export const MATCH_IN_PROGRESS_TEXT = 'Матч уже йде — дочекайся наступного лобі';
+
+/**
  * RPC failures reach the UI as a bare string (the gateway rejects with
  * error.description). survival.buyBack now answers with the machine tag itself, so a
  * tag-shaped message gets translated while real prose ('Not authenticated') is left
@@ -79,6 +98,8 @@ export function reasonWithTag(reason?: unknown): string {
 export function errorText(message?: unknown): string {
   const raw = typeof message === 'string' ? message.trim() : '';
   if (!raw) return 'Невідома помилка';
+  // the one prose string that is a contract signal, not a failure — see isLobbyEnded above
+  if (isLobbyEnded(raw)) return LOBBY_ENDED_TEXT;
   if (!/^[a-z][a-z0-9_]{2,63}$/.test(raw)) return raw;
   const text = lookupReason(raw);
   return text ? `${text} (${raw})` : raw;

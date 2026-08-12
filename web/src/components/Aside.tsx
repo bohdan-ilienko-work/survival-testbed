@@ -6,6 +6,7 @@
 import type { ServerEvent } from '../gateway';
 import type { LobbyPlayer } from '../survival';
 import { CharacterImg, FlagImg } from './PlayerArt';
+import { humansBotsLabel } from './peopleWords';
 
 export function Aside({
   players,
@@ -22,7 +23,12 @@ export function Aside({
 }) {
   return (
     <aside>
-      <h3>Гравці ({alive}/{players.length})</h3>
+      {/* C2: bots are seeded from lobby open, so alive/total alone is a bot census — the
+          humans/bots split is what tells a tester their second tab actually landed */}
+      <h3>
+        Гравці ({alive}/{players.length}
+        {players.length > 0 && <> · {humansBotsLabel(players.length, players)}</>})
+      </h3>
       {/* Same artwork components as the booking roster — the two lists show the same
           players and must not drift into two different looks. The 🤖/🧑 emoji this replaced
           said nothing the row does not now say better: a bot has no flag, no clan and the
