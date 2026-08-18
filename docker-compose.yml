@@ -234,7 +234,6 @@ services:
       - SURVIVAL_BUYBACK_ROUND_MULTIPLIERS=${SURVIVAL_BUYBACK_ROUND_MULTIPLIERS:-}
       - CHRONO_DB_URL=${CHRONO_DB_URL:-}
       - CHRONO_DB_NAME=${CHRONO_DB_NAME:-chrono_db}
-      - SURVIVAL_CHRONO_EVENTS_PER_ROUND=${SURVIVAL_CHRONO_EVENTS_PER_ROUND:-}
       # daily predefined sets (db survival_factory). Empty defaults keep legacy
       # behavior; with an empty URL survival-server falls back to the
       # CHRONO_DB_URL cluster, which in this testbed is the local `mongo`

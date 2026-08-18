@@ -48,6 +48,25 @@ main > * { min-width: 0; }
   color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line);
   padding: 1px 9px; border-radius: var(--r-pill); font-size: 11px;
 }
+/* ─── the sudden-death marker ───────────────────────────────────────────────────────
+   Deliberately the loudest thing in the bar, and deliberately NOT the .mode pill's colour: a
+   tiebreak is a different KIND of round, not a different mode of one, and the whole point of
+   the badge is that a tester can tell the two apart without reading either. */
+.stepbar .tiebreak {
+  color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad-line);
+  padding: 1px 9px; border-radius: var(--r-pill); font-size: 11px; font-weight: 600;
+  letter-spacing: .02em;
+}
+/* Settled: the marker stays on screen through the results board so it can explain it, but it
+   is history by then and must not go on shouting beside a live round's countdown. */
+.stepbar .tiebreak.done { color: var(--muted); background: var(--surface); border-color: var(--line); }
+/* The reveal pause is the one window where nothing is happening and something is about to —
+   the pulse is what stops it reading as a frozen screen. */
+.stepbar .tiebreak.pending { animation: tiebreak-pulse 1s ease-in-out infinite; }
+@keyframes tiebreak-pulse { 50% { opacity: .55; } }
+/* Respect the OS setting: a pulsing badge is a comfort cue, never information. */
+@media (prefers-reduced-motion: reduce) { .stepbar .tiebreak.pending { animation: none; } }
+
 /* tabular-nums so a two-digit → one-digit countdown does not shift the row it sits in */
 .stepbar .timer {
   margin-left: auto; font-size: 20px; font-weight: 700; color: var(--ok);

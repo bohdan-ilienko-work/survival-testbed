@@ -15,6 +15,7 @@ import { asTag } from './guards';
 import { eventPayload, reduce } from './reduce';
 import { initialState, type Step, type SurvivalState } from './state';
 import { readSpectatorSnapshot, type SpectatorFight, type SpectatorLobby, type SpectatorSnapshot } from './spectator';
+import { withSnapshotTiebreak } from './spectatorTiebreak';
 import type { LastResult } from './wire';
 
 export interface SpectatorFeed {
@@ -176,7 +177,7 @@ export function reduceSpectator(feed: SpectatorFeed, ev: ServerEvent): Spectator
 
   const p = eventPayload(ev.args);
   if (ev.name === 'spectatorLobbyChanged') {
-    return applySpectatorSnapshot(readSpectatorSnapshot(p));
+    return withSnapshotTiebreak(applySpectatorSnapshot(readSpectatorSnapshot(p)), p);
   }
 
   const state = reduce(feed.state, ev, undefined);
@@ -186,9 +187,7 @@ export function reduceSpectator(feed: SpectatorFeed, ev: ServerEvent): Spectator
   // match B — and see it again the moment B finished.
   const lastResult = ev.name === 'fightStarted' ? undefined : feed.lastResult;
 
-  if (state === feed.state && answeredIds === feed.answeredIds && lastResult === feed.lastResult) {
-    return feed;
-  }
+  if (state === feed.state && answeredIds === feed.answeredIds && lastResult === feed.lastResult) return feed;
   return {
     ...feed,
     // one source of truth for the count: the ids, so the footnote under a question can never

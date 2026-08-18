@@ -100,16 +100,30 @@ function answerFor(question, mode, wantCorrect) {
     // field is `events`.) The harness cannot know the true pairing, so "correct" here just
     // means a WELL-FORMED answer: isChronoAnswer rejects duplicate indices and a wrong length
     // outright, and an ill-formed answer scores 0 without proving anything about the round.
+    // At three events the identity below is right one time in six, which is exactly what a
+    // blind guess is worth — the server shuffles the year strip fairly and removes no
+    // permutation from the deck. So `--accuracy 1` does not make a CHRONO round winnable on
+    // demand; a scripted run wins roughly one CHRONO in six and sends the rest to a decider.
+    // That is the harness's blind spot, not a server fault: nothing on the wire carries the
+    // true pairing before the round is scored.
     const events = question.events || [];
     const yearCount = (question.years || []).length;
     const pairs = events.map((_, i) => (i < yearCount ? i : -1));
-    // A rotation keeps every index distinct — still a legal answer, just a different one
-    if (!wantCorrect && yearCount > 1) {
-      for (let i = 0; i < pairs.length; i++) {
-        if (pairs[i] !== -1) pairs[i] = (pairs[i] + 1) % yearCount;
-      }
-    }
-    return { type: 'chrono', pairs };
+    if (wantCorrect) return { type: 'chrono', pairs };
+
+    // WRONG — and provably so, which no complete pairing can be. The harness never sees the
+    // true pairing, so any permutation it invents is the right one with probability 1/n!, and
+    // a CHRONO round is three events now: the rotation this branch used to send scored a full
+    // 100 on one round in six, so `--accuracy 0` was not the all-wrong fixture it is sold as.
+    // Leaving ONE event unpaired takes the guess out of it — scoreChronoRound marks `correct`
+    // only on a full pairing and -1 matches no year index — while -1 is a value the server
+    // accepts, so this stays a WELL-FORMED answer and not a rejected one. The rotation stays
+    // on the events that are still paired, so the answer is a real partial attempt rather than
+    // an empty one.
+    const wrong = pairs.map((yi) => (yi === -1 || yearCount < 2 ? -1 : (yi + 1) % yearCount));
+    const drop = wrong.findIndex((yi) => yi !== -1);
+    if (drop >= 0) wrong[drop] = -1;
+    return { type: 'chrono', pairs: wrong };
   }
   if (m === 'NUMBER') {
     return { type: 'number', value: wantCorrect ? 1000 : Math.floor(Math.random() * 1e6) };
@@ -253,6 +267,10 @@ const seen = {
   /** every BuyBack denial reason we managed to observe, RPC or event */
   denials: [],
   buyBackOk: 0,
+  /** deciders the run actually played — 0 on a run whose CHRONO rounds all went to one is a bug */
+  tiebreaks: 0,
+  /** decider mode -> count; the decider is never the round's own mode */
+  tiebreakModes: {},
   /** event names this script does not handle — catches a casing slip in a new event */
   otherEvents: new Set(),
 };
@@ -509,6 +527,50 @@ function onEvent(p, name, payload) {
       }, delay);
       break;
     }
+    /**
+     * The decider, and until now the one round-shaped thing this script could not answer.
+     * A tiebreak is NOT a round: it consumes no round number and emits no `roundStarted`, so
+     * it never reached the answer path above — every decider ran its window out against a
+     * silent cohort, and the fight burned all of its iterations before resolving the tie the
+     * only way left to it. CHRONO is what makes that unaffordable rather than merely slow:
+     * with three events the harness cannot pair a round correctly at all (see answerFor), so
+     * every CHRONO round ends all-wrong and every one of them opens a decider.
+     *
+     * `mode` here is the DECIDER's mode, MAP or NUMBER — never the round's own, which is the
+     * mode that just failed to separate anybody — and the answer goes back through the same
+     * `submitAnswer` the round uses. Only the named cohort may answer; the server refuses
+     * everyone else, so sending anyway would put a failure in the log that is not one.
+     */
+    case 'tiebreakStarted': {
+      const cohort = payload.playerIds || [];
+      if (p.index === 0) {
+        seen.tiebreaks++;
+        seen.tiebreakModes[payload.mode] = (seen.tiebreakModes[payload.mode] || 0) + 1;
+        log(
+          `  ⚖ tiebreak · round ${payload.round} · ${payload.mode} · ${payload.reason || 'no reason'}` +
+            ` · ${payload.iteration}/${payload.maxIterations} · ${cohort.length} player(s)`,
+        );
+      }
+      if (!cohort.includes(p.playerId)) break;
+      const tbAnswer = answerFor(payload.question || {}, payload.mode, Math.random() < ACCURACY);
+      // A decider's window is shorter than a round's, and its `deadline` is ABSOLUTE — a delay
+      // rolled against a round's budget would land after a window that is already running out.
+      const tbDelay = 500 + Math.random() * 1500;
+      const room = payload.deadline ? Math.max(0, payload.deadline - Date.now() - 1500) : tbDelay;
+      setTimeout(() => {
+        call(p.survivalApi, 'survival', 'submitAnswer', [[tbAnswer]]).catch((e) =>
+          log(`player${p.index}: tiebreak submitAnswer ✗ ${e.message}`),
+        );
+      }, Math.min(tbDelay, room));
+      break;
+    }
+    case 'tiebreakResult':
+      if (p.index === 0) {
+        log(`  ⚖ tiebreak result · ${(payload.scores || []).length} scored` +
+            (payload.resolvedBy ? ` · resolvedBy=${payload.resolvedBy}` : ''));
+      }
+      break;
+
     case 'roundResult':
       if (p.index === 0) {
         const out = (payload.eliminated || []).length;
@@ -780,6 +842,10 @@ function checkAgainstSet(set) {
   console.log('finished       :', seen.finished);
   console.log('rounds played  :', seen.rounds);
   console.log('modes seen     :', JSON.stringify(seen.modes));
+  console.log(
+    'tiebreaks      :',
+    seen.tiebreaks ? `${seen.tiebreaks} · ${JSON.stringify(seen.tiebreakModes)}` : 'none',
+  );
   if (exactFeeOk !== null) {
     console.log(
       'entry with exact fee:',

@@ -153,11 +153,13 @@ export function ChronoPairing({
         );
       })}
 
-      {/* An EXPLICIT submit, unlike the sequence UI this replaced (which fired the moment every
-          event had been clicked). A pairing stays editable to the last second — one drop can
-          swap two rows — so the first instant every slot happens to be full is not the instant
-          the tester means to send, and the server takes one answer per round. Left enabled while
-          the pairing is incomplete because -1 is a legal value and that path needs testing too. */}
+      {/* The button is now the ESCAPE HATCH, not the normal path: QuestionView autosubmits the
+          moment the last event gets a year, to match the Unity client's own autosubmit.
+          That reverses the rule this panel used to state, and the cost is real and worth naming
+          — a full pairing can no longer be revised, so the swap gesture only reaches rows while
+          at least one event is still empty. What the button is FOR is the other path: -1 is a
+          legal value the server accepts, and a deliberately partial pairing has no completion
+          moment to fire on, so it can only be sent by hand. */}
       <button
         className="primary pair-submit"
         disabled={disabled || noYears}
@@ -166,7 +168,11 @@ export function ChronoPairing({
         Відповісти — {paired} з {events.length}
       </button>
       {!noYears && paired < events.length && (
-        <p className="hint">Непаровані події підуть як -1 — сервер таку відповідь приймає.</p>
+        <p className="hint">
+          Непаровані події підуть як -1 — сервер таку відповідь приймає. Щойно рік отримає
+          остання подія, відповідь піде сама, тож міняти пари місцями можна лише поки хоч
+          одна подія порожня.
+        </p>
       )}
     </div>
   );

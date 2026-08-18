@@ -8,7 +8,26 @@
 // «14 > 9» is the only way a player can tell why they went out — the score column cannot say it.
 
 import { MapPicker } from '../MapPicker';
-import { asMiss, type SurvivalState } from '../survival';
+import { asMiss, tiebreakReasonText, type SurvivalState, type TiebreakInfo } from '../survival';
+
+/**
+ * What the sudden death is doing to THIS board, in one sentence per phase.
+ *
+ * A separate function only because the settled case has two optional halves (the iteration,
+ * and the cap it counts against) — spelled inline it was four nested ternaries deep, and the
+ * one thing this line must be is readable.
+ */
+function tiebreakStory(tb: TiebreakInfo): string {
+  if (tb.phase === 'pending') {
+    return 'Раунд нікого не вибиває сам по собі — зараз прийде додаткове питання, і вибуття вирішить воно.';
+  }
+  if (tb.phase === 'active') {
+    return 'Додаткове питання відкрите — таблиця нижче ще від раунду, який його спричинив.';
+  }
+  const cap = tb.maxIterations === undefined ? '' : ` з ${tb.maxIterations}`;
+  const attempt = tb.iteration === undefined ? '' : ` (спроба ${tb.iteration}${cap})`;
+  return `Вибуття вирішило додаткове питання${attempt}, а не бали цього раунду.`;
+}
 
 export function ResultsView({ state, me, now }: { state: SurvivalState; me?: string; now: number }) {
   // the two modes the floating delta decides; QUESTION / CHRONO carry no miss at all
@@ -46,6 +65,17 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
       {state.nextRoundAt !== undefined && (
         <p className="countdown">
           наступний раунд через {Math.max(0, Math.ceil((state.nextRoundAt - now) / 1000))} с
+        </p>
+      )}
+
+      {/* WHY this board looks the way it does. A sudden death is not a round — it consumes no
+          round number and emits no `roundStarted` — so without this line the player sees an
+          extra question appear out of nowhere and, on the all-wrong path, an elimination list
+          that no column of the table below can explain. The marker survives `roundResult`
+          precisely so it can be read here, where there is finally time to read it. */}
+      {state.tiebreak && (
+        <p className={`tiebreak-note ${state.tiebreak.phase}`}>
+          <b>Тайбрейк — {tiebreakReasonText(state.tiebreak.reason)}.</b> {tiebreakStory(state.tiebreak)}
         </p>
       )}
 

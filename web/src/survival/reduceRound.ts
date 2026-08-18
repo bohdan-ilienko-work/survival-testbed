@@ -1,13 +1,15 @@
 // The round itself: a question is handed out, answers land, results and eliminations come back,
-// and a tie is broken by a NUMBER round.
+// and a tie — or a round nobody got right — is settled by a sudden-death decider.
 //
 // One family because every case here is scoped to a SINGLE round — each one either fills or
 // clears the same set of per-round fields (question, deadline, myAnswer, scores, eliminated),
 // which is exactly what makes `roundStarted` the event that separates two BuyBack windows.
 
-import { asIds, asMiss, asNum, asScores, asYears } from './guards';
+import { asIds, asMiss, asNum, asScores, asTag, asYears } from './guards';
 import type { SurvivalState } from './state';
+import { mergeRoundResultTiebreak, readTiebreak } from './tiebreak';
 import { NO_OFFER } from './wallet';
+import type { RoundMode } from './wire';
 
 /** Answers `undefined` for any event this family does not own, so the dispatcher can move on. */
 export function reduceRound(
@@ -44,6 +46,8 @@ export function reduceRound(
         roundDelta: undefined,
         eliminated: [],
         buybackOpen: false,
+        // an ORDINARY round: a marker left standing would label it a sudden death
+        tiebreak: undefined,
       };
 
     case 'answerReceived':
@@ -59,6 +63,10 @@ export function reduceRound(
       return {
         ...state,
         step: 'results',
+        // The FINISHED round's mode, put back. A decider leaves `mode` as its own (NUMBER /
+        // MAP), and without this the QUESTION or CHRONO board that follows would be drawn with
+        // a «похибка» column and a proximity threshold neither of them ever had.
+        mode: (asTag(p.mode) as RoundMode | undefined) ?? state.mode,
         scores: asScores(p.scores) ?? [],
         correctAnswer: p.correctAnswer,
         // MAP / NUMBER only, and only when the server named a finite one
@@ -73,26 +81,79 @@ export function reduceRound(
         nextRoundAt: asNum(p.nextRoundAt),
         eliminated,
         iAmEliminated: state.iAmEliminated || iAmOut,
+        // WHY this board looks the way it does. Deliberately not cleared here — see
+        // mergeRoundResultTiebreak.
+        tiebreak: mergeRoundResultTiebreak(state.tiebreak, p),
       };
     }
 
-    case 'tiebreakStarted':
+    // The reveal pause: the round is scored, nobody got it right, and the decider question is
+    // not open yet. It is the ONE moment the player is told why another question is about to
+    // appear, so it lands on the results step carrying the finished round's own board.
+    //
+    // No `deadline` and no `nextRoundAt`: nothing is being answered and no ordinary round is
+    // coming — the marker's `startsAt` is the only countdown this window has.
+    case 'tiebreakPending': {
+      const reveal = p.roundReveal && typeof p.roundReveal === 'object' ? p.roundReveal : {};
       return {
         ...state,
-        step: 'question',
-        mode: 'NUMBER',
-        question: { ...(p.question ?? {}), mode: 'NUMBER', deadline: p.question?.deadline },
-        deadline: p.question?.deadline,
+        step: 'results',
+        mode: (asTag(reveal.mode) as RoundMode | undefined) ?? state.mode,
+        scores: asScores(reveal.scores) ?? state.scores,
+        correctAnswer: 'correctAnswer' in reveal ? reveal.correctAnswer : state.correctAnswer,
+        deadline: undefined,
+        nextRoundAt: undefined,
+        tiebreak: readTiebreak(p, 'pending'),
+      };
+    }
+
+    case 'tiebreakStarted': {
+      // The mode is READ, not assumed. It used to be hardcoded 'NUMBER', which drew a MAP
+      // sudden death as a number input — a question the player physically could not answer.
+      const mode = (asTag(p.mode) as RoundMode | undefined) ?? p.question?.mode ?? 'NUMBER';
+      // Top level first, the way `roundStarted` spells it; inside the question is where it
+      // used to be, and both have to keep working while server and client are out of step.
+      const deadline = asNum(p.deadline) ?? asNum(p.question?.deadline);
+      return {
+        ...state,
+        // An eliminated player WATCHES a decider, exactly as they watch a round. The step used
+        // to be forced to 'question', which handed a dead player a live answer panel.
+        step: state.iAmEliminated ? 'spectator' : 'question',
+        mode,
+        question: {
+          ...(p.question ?? {}),
+          mode,
+          years: asYears(p.question?.years),
+          deadline,
+        },
+        deadline,
         // a tiebreak interrupts the pause — its question must not share the screen with a
         // «наступний раунд» countdown that no longer holds
         nextRoundAt: undefined,
         myAnswer: undefined,
+        // The server counts the DECIDER's answers from zero, so a count left over from the round
+        // that caused the tiebreak would sit above the decider claiming answers nobody has sent.
+        answeredCount: 0,
+        tiebreak: readTiebreak(p, 'active', state.tiebreak),
       };
+    }
 
     case 'tiebreakResult':
-      // a non-array is "the server did not say" and must keep the round's own scores standing,
-      // exactly as it did before — the guard only changes WHAT a present array is trusted for
-      return { ...state, step: 'results', scores: asScores(p.scores) ?? state.scores };
+      return {
+        ...state,
+        step: 'results',
+        // The DECIDER's own board, so its mode is what makes the miss column readable — a
+        // decider is MAP or NUMBER and every line carries an `err`. `roundResult` puts the
+        // finished round's mode back a moment later.
+        mode: (asTag(p.mode) as RoundMode | undefined) ?? state.mode,
+        // a non-array is "the server did not say" and must keep the round's own scores standing,
+        // exactly as it did before — the guard only changes WHAT a present array is trusted for
+        scores: asScores(p.scores) ?? state.scores,
+        // present only when a question was actually asked; a deterministic settle asks none
+        correctAnswer: 'correctAnswer' in p ? p.correctAnswer : state.correctAnswer,
+        deadline: undefined,
+        tiebreak: readTiebreak(p, 'done', state.tiebreak),
+      };
 
     case 'playerEliminated': {
       const iAmOut = myPlayerId === p.playerId;

@@ -137,6 +137,19 @@
 
 .answered { color: var(--muted); font-size: 12px; margin: var(--sp-3) 0 0; }
 
+/* The line that explains a board a sudden death produced. It sits ABOVE the table on purpose:
+   on an all-wrong round every row reads ❌ and the elimination list matches no column at all,
+   so the explanation has to be read before the numbers, not after them. */
+.tiebreak-note {
+  background: var(--bad-soft); border: 1px solid var(--bad-line); color: var(--text);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  font-size: 13px; line-height: 19px;
+}
+.tiebreak-note b { color: var(--bad); }
+/* Settled — same words, no alarm: the round is over and the board below it is final. */
+.tiebreak-note.done { background: var(--panel-2); border-color: var(--line); }
+.tiebreak-note.done b { color: var(--muted); }
+
 .results table { width: 100%; border-collapse: collapse; }
 .results th, .results td {
   text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top;

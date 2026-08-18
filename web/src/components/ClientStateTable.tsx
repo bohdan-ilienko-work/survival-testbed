@@ -5,6 +5,7 @@
 // screen exists to make visible — which is why «—» and «не знаю» are never collapsed into 0.
 
 import type { SurvivalState } from '../survival';
+import { playersLeftLabel } from './peopleWords';
 
 export function ClientStateTable({
   state,
@@ -67,7 +68,20 @@ export function ClientStateTable({
                 : `${state.rewards.length} рядків`}
             </td>
           </tr>
-          <tr><td>гравців</td><td>{alive} / {total}</td></tr>
+          <tr>
+            <td>тайбрейк</td>
+            <td>
+              {/* The marker as the reducer holds it. Raw, like every other row here: «фаза» is
+                  what says whether answers are open, and the cohort is what says who is
+                  actually playing the decider. */}
+              {state.tiebreak === undefined
+                ? '—'
+                : `${state.tiebreak.phase} · ${state.tiebreak.reason ?? 'причини нема'} · ` +
+                  `${state.tiebreak.iteration ?? '—'}/${state.tiebreak.maxIterations ?? '—'} · ` +
+                  `грають ${state.tiebreak.playerIds.length}`}
+            </td>
+          </tr>
+          <tr><td>гравців</td><td>{alive} / {total} · {playersLeftLabel(alive)}</td></tr>
         </tbody>
       </table>
     </details>

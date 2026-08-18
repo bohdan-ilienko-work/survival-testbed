@@ -6,7 +6,7 @@
 // door keeps "how a tab enters and leaves a match". Plain closures, not a React hook — it
 // holds no state of its own; everything lands in SurvivalState through deps.setState.
 
-import { LOBBY_ENDED_TEXT, MATCH_IN_PROGRESS_TEXT, applyConnectReply } from '../survival';
+import { LOBBY_ENDED_TEXT, MATCH_IN_PROGRESS_TEXT, applyConnectReply, enterLobby } from '../survival';
 import { isStaleBinding, joinGateOpen, joinWithTicketTopUp } from './joinPolicy';
 import type { JoinAttemptIO, JoinGateIO } from './joinPolicy';
 import type { ActionDeps } from './types';
@@ -86,7 +86,10 @@ export function makeSurvivalBinding(
     if (bound?.reconnected === true) {
       pushLog('reconnected=true — бій ще активний, стан раунду прийде подіями');
     }
-    setState((st) => applyConnectReply(st, bound));
+    // enterLobby FIRST: a reply for a DIFFERENT lobby than the one on screen means the
+    // previous match's round, board and verdict are stale, and applyConnectReply merges rather
+    // than replaces — so without this the new lobby inherited the old match's round number.
+    setState((st) => applyConnectReply(enterLobby(st, bound?.lobbyId), bound));
     return bound;
   };
 
