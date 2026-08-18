@@ -237,6 +237,10 @@ services:
       # how far one bot's accuracy may sit from SURVIVAL_BOT_ACCURACY, so a lobby of bots does
       # not get every round right or wrong together
       - SURVIVAL_BOT_SKILL_SPREAD=${SURVIVAL_BOT_SKILL_SPREAD:-}
+      # bots buy back too, so the pause countdown means something on a round that eliminated
+      # only bots. A bot's revive costs nothing, hence its own cap.
+      - SURVIVAL_BOT_BUYBACK_CHANCE=${SURVIVAL_BOT_BUYBACK_CHANCE:-}
+      - SURVIVAL_BOT_BUYBACK_MAX_USES=${SURVIVAL_BOT_BUYBACK_MAX_USES:-}
       # languages a question must be fully playable in before it may be served; a language the
       # content does not carry empties the pool, and the server then reloads it unfiltered
       - SURVIVAL_REQUIRED_LANGS=${SURVIVAL_REQUIRED_LANGS:-}
