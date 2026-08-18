@@ -34,6 +34,16 @@ const REASON_TEXT: Record<string, string> = {
   buyback_too_few_players: 'Залишилося замало гравців — викуп уже неможливий',
   // gate: BUYBACK_MAX_USES — this player has spent every attempt
   buyback_attempts_exhausted: 'Ти вже використав усі спроби викупу',
+
+  // ─── survival.spectate ────────────────────────────────────────────────────
+  // Watching costs nothing and needs no account, so the only refusals it has are about the
+  // SERVER's load and the operator's kill switch — never about this viewer's rights.
+  spectator_disabled: 'Режим глядача вимкнено на сервері',
+  spectator_capacity: 'Забагато глядачів — спробуй пізніше',
+  // the snapshot rate limit (SURVIVAL_SPECTATE_MIN_INTERVAL_MS): a re-sync, not a seat, is refused
+  too_fast: 'Занадто часто — зачекай секунду й онови кадр ще раз',
+  // a socket that already holds a PAID binding: downgrading it would drop the ticket it paid
+  already_in_match: 'Ця вкладка вже в матчі — дивитись збоку можна лише з вільної',
 };
 
 const TOO_FEW_PLAYERS = REASON_TEXT.buyback_too_few_players;

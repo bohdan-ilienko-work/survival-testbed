@@ -1,0 +1,44 @@
+/* ───────────────────────────────────────────────────────────────────────────────
+   spectator.css — the three things the watch screen adds to panels it otherwise
+   borrows whole: the viewer counter in the .stepbar, the «уже відповіли» name strip
+   under a live question, and the frame around a finished match's board.
+
+   Deliberately small. The watch screen is the stage's own markup — .stage, .stepbar,
+   .panel, .booking, .rosterbox, .countdown, .results, .finish — because a spectator
+   and a player look at the same round; anything else here would be a second look for
+   one payload. These rules exist only where the watcher shows something a player has
+   no equivalent of.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* Same quiet chip as the .stepbar's other spans, but it must not take the .timer's
+   `margin-left: auto` slot — that is what pins the countdown to the far end of the row. */
+.stepbar .viewers {
+  color: var(--muted); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 1px 9px; font-size: 11px; font-variant-numeric: tabular-nums;
+}
+
+/* ─── who has answered the open round ───────────────────────────────────────────
+   Names only, and never what they answered — the server sends `{ playerId, round }`
+   and nothing else on purpose. Sits on the stage as its own line under the question
+   panel, so .stage's grid gap spaces it and it carries no margin of its own. */
+.answered-by {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1);
+  margin: 0; color: var(--muted); font-size: 12px;
+}
+.answered-by .lbl { margin-right: var(--sp-1); }
+.answered-by em { font-style: normal; opacity: .7; }
+.answered-by .answerer {
+  /* the same green as a filled CHRONO slot: "this one is in" reads identically on both */
+  background: var(--ok-soft); border: 1px solid var(--ok-line); color: var(--ok);
+  border-radius: var(--r-pill); padding: 1px 9px;
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ─── the match that just ended ─────────────────────────────────────────────────
+   FinishView unchanged, one hairline around it: after a lobby ROTATION the panel above
+   it is already the NEXT lobby, so without a frame the two read as one screen and the
+   final table looks like it belongs to a match that has not started. */
+.watched-board {
+  border-left: 2px solid var(--line); padding-left: var(--sp-3);
+}

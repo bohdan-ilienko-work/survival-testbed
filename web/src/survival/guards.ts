@@ -4,7 +4,7 @@
 // They live together because every comment below is the same lesson learned on a different field,
 // and because the composite guards (asYears, asRewards) are built out of the scalar ones.
 
-import type { LastResult, LobbyPlayer, RankReward, RewardRow } from './wire';
+import type { LastResult, LobbyPlayer, RankReward, RewardRow, Score } from './wire';
 
 /**
  * Some events carry `players` as a COUNT (onboardingStarted) and others as a LIST
@@ -72,6 +72,49 @@ export const asBool = (value: unknown, fallback?: boolean): boolean | undefined 
 export const asTag = (value: unknown): string | undefined => {
   const tag = typeof value === 'string' ? value.trim() : '';
   return tag === '' ? undefined : tag;
+};
+
+/**
+ * A list of player ids — `roundResult.eliminated`, and the spectator snapshot's `answered`.
+ *
+ * Rows are dropped individually rather than all-or-nothing (the opposite of asYears): nothing
+ * addresses these BY INDEX, so a single unreadable entry costs one name, not the whole list.
+ * A non-array answers `[]` — "nobody", which every caller renders as an empty line rather than
+ * crashing on .map.
+ */
+export const asIds = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v !== '') : [];
+
+/**
+ * A scored round's `scores`, one line per player.
+ *
+ * Guarded per FIELD, because the results table does arithmetic with every one of them: it sorts
+ * on `rank`, rounds `score` and prints `err` beside the round's threshold, so a string or a null
+ * arriving where `number` is declared renders as NaN in a cell that is supposed to explain why
+ * somebody went out. A row with no playerId is dropped — there is nobody to attribute it to and
+ * React would key the row on `undefined`.
+ *
+ * `answer` is the one field that travels untouched: it is a raw submitted answer of any shape,
+ * and `null` ("did not answer in time") is a REAL value the table must keep distinguishable
+ * from an absent key, which it prints as «—».
+ */
+export const asScores = (value: unknown): Score[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const rows: Score[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.playerId !== 'string' || r.playerId === '') continue;
+    rows.push({
+      playerId: r.playerId,
+      score: asNum(r.score) ?? 0,
+      rank: asNum(r.rank) ?? 0,
+      correct: asBool(r.correct) ?? false,
+      ...('answer' in r ? { answer: r.answer } : {}),
+      err: asNum(r.err),
+    });
+  }
+  return rows;
 };
 
 /**

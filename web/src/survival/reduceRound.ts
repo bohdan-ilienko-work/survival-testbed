@@ -5,7 +5,7 @@
 // clears the same set of per-round fields (question, deadline, myAnswer, scores, eliminated),
 // which is exactly what makes `roundStarted` the event that separates two BuyBack windows.
 
-import { asMiss, asNum, asYears } from './guards';
+import { asIds, asMiss, asNum, asScores, asYears } from './guards';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
@@ -50,12 +50,16 @@ export function reduceRound(
       return { ...state, answeredCount: state.answeredCount + 1 };
 
     case 'roundResult': {
-      const eliminated: string[] = p.eliminated ?? [];
+      // Guarded, not trusted: the results table sorts on `rank`, rounds `score` and prints
+      // `err` beside the round's threshold, so one string where a number is declared renders
+      // as NaN in the very cell that is supposed to explain who went out and why. The
+      // spectator snapshot reads the same rows through the same guard — one shape, one reader.
+      const eliminated = asIds(p.eliminated);
       const iAmOut = myPlayerId ? eliminated.includes(myPlayerId) : false;
       return {
         ...state,
         step: 'results',
-        scores: p.scores ?? [],
+        scores: asScores(p.scores) ?? [],
         correctAnswer: p.correctAnswer,
         // MAP / NUMBER only, and only when the server named a finite one
         roundDelta: asMiss(p.roundDelta),
@@ -86,7 +90,9 @@ export function reduceRound(
       };
 
     case 'tiebreakResult':
-      return { ...state, step: 'results', scores: p.scores ?? state.scores };
+      // a non-array is "the server did not say" and must keep the round's own scores standing,
+      // exactly as it did before — the guard only changes WHAT a present array is trusted for
+      return { ...state, step: 'results', scores: asScores(p.scores) ?? state.scores };
 
     case 'playerEliminated': {
       const iAmOut = myPlayerId === p.playerId;

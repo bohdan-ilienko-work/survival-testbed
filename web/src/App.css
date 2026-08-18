@@ -52,5 +52,8 @@
 @import './styles/widgets.css';
 @import './styles/booking.css';
 
+/* the watch screen — after booking.css, whose .rosterbox / .roster grid it reuses whole */
+@import './styles/spectator.css';
+
 /* last, and only ever last — see the note above */
 @import './styles/responsive.css';
