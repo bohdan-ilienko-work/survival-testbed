@@ -227,6 +227,19 @@ services:
       - SURVIVAL_INSTANT_START=${SURVIVAL_INSTANT_START:-}
       - SURVIVAL_MAX_ROUNDS=${SURVIVAL_MAX_ROUNDS:-}
       - SURVIVAL_BOT_ACCURACY=${SURVIVAL_BOT_ACCURACY:-}
+      # a round nobody got right plays a decider instead of wiping the lobby: how long the
+      # result is shown first, how long the decider's own answer window is, how many deciders
+      # may run, and whether they are NUMBER (default), MAP or ALTERNATE
+      - SURVIVAL_TIEBREAK_REVEAL_MS=${SURVIVAL_TIEBREAK_REVEAL_MS:-}
+      - SURVIVAL_TIEBREAK_MS=${SURVIVAL_TIEBREAK_MS:-}
+      - SURVIVAL_MAX_TIEBREAK_ROUNDS=${SURVIVAL_MAX_TIEBREAK_ROUNDS:-}
+      - SURVIVAL_ALLWRONG_TIEBREAK_MODE=${SURVIVAL_ALLWRONG_TIEBREAK_MODE:-}
+      # how far one bot's accuracy may sit from SURVIVAL_BOT_ACCURACY, so a lobby of bots does
+      # not get every round right or wrong together
+      - SURVIVAL_BOT_SKILL_SPREAD=${SURVIVAL_BOT_SKILL_SPREAD:-}
+      # languages a question must be fully playable in before it may be served; a language the
+      # content does not carry empties the pool, and the server then reloads it unfiltered
+      - SURVIVAL_REQUIRED_LANGS=${SURVIVAL_REQUIRED_LANGS:-}
       - SURVIVAL_BUYBACK_MIN_PLAYERS_REQUIRED=${SURVIVAL_BUYBACK_MIN_PLAYERS_REQUIRED:-}
       - SURVIVAL_BUYBACK_MAX_USES=${SURVIVAL_BUYBACK_MAX_USES:-}
       - SURVIVAL_BUYBACK_FIXED_COSTS=${SURVIVAL_BUYBACK_FIXED_COSTS:-}
