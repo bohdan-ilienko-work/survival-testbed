@@ -10,6 +10,8 @@
 //   reasons.ts  — machine reason tags → the Ukrainian text the player reads
 //   wallet.ts   — the per-player BuyBack offer and the ticket balance
 //   booking.ts  — the RPC replies the booking screen polls
+//   spectator.ts     — the watcher's one reply shape, guarded
+//   spectatorFeed.ts — that snapshot plus the live stream, as a SurvivalState of its own
 //   reduce.ts   — the event dispatcher, split by family into reduceLobby / Round / Buyback
 
 export type {
@@ -42,3 +44,17 @@ export {
   readOnboardingClosesAt,
 } from './survival/booking';
 export { reduce } from './survival/reduce';
+export type {
+  SpectatorFight,
+  SpectatorLobby,
+  SpectatorRound,
+  SpectatorSnapshot,
+} from './survival/spectator';
+export { readSpectatorSnapshot } from './survival/spectator';
+export type { SpectatorFeed } from './survival/spectatorFeed';
+export {
+  applySpectatorSnapshot,
+  emptySpectatorFeed,
+  lastResultBoard,
+  reduceSpectator,
+} from './survival/spectatorFeed';

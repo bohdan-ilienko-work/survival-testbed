@@ -17,6 +17,7 @@ import { useMatchEntry, type MatchEntry } from './useMatchEntry';
 import { useMyLook, type MyLook } from './useMyLook';
 import { useProfileEdits, type ProfileEdits } from './useProfileEdits';
 import { useSession, type SessionState } from './useSession';
+import { useSpectator, type Spectator } from './useSpectator';
 import { useTickets, type Tickets } from './useTickets';
 import type { ActionDeps } from './types';
 
@@ -34,7 +35,9 @@ export interface AppWiring {
   entry: MatchEntry;
   match: MatchActions;
   edits: ProfileEdits;
-  /** state.players guarded ONCE, so the stage and the dialogs count the same array */
+  /** watching a match this tab never joined — App swaps the stage for the watch screen on it */
+  spectator: Spectator;
+  /** the roster on screen, guarded ONCE, so the stage and the dialogs count the same array */
   players: LobbyPlayer[];
   alive: number;
   myLook: MyLook;
@@ -53,7 +56,13 @@ export function useAppWiring(): AppWiring {
   // through, and the gateway needs a session to sign in as.
   const conn = useGateway({
     onOpen: (gateway) => void session.signIn(gateway),
-    onSurvivalEvent: (ev) => setState((s) => reduce(s, ev, session.playerIdRef.current)),
+    // A WATCHING tab is bound to no lobby of its own: every event it receives belongs to the
+    // match it is watching, so letting the player reducer see them would build a ghost lobby
+    // for a tab that never joined — and leave it standing on the stage after «Досить дивитись».
+    onSurvivalEvent: (ev) => {
+      if (spectator.watching) return spectator.onEvent(ev);
+      setState((s) => reduce(s, ev, session.playerIdRef.current));
+    },
   });
 
   const { busy, run, runInDialog, dialogError, setDialogError } = useActionRunner(
@@ -87,6 +96,7 @@ export function useAppWiring(): AppWiring {
     rejoinAndRetry: entry.rejoinAndRetry,
     resetAndReenter: entry.resetAndReenter,
   });
+  const spectator = useSpectator(deps);
   const edits = useProfileEdits(deps, {
     playerId: session.playerId,
     setProfile: session.setProfile,
@@ -94,7 +104,11 @@ export function useAppWiring(): AppWiring {
     fetchBooking: booking.fetchBooking,
   });
 
-  const players = Array.isArray(state.players) ? state.players : [];
+  // While watching, the aside lists the WATCHED lobby: this tab is in no lobby of its own, so
+  // the player state's empty roster would leave the column blank beside a running match.
+  // `myLook` deliberately keeps reading state.players — that one is about ME, not about them.
+  const onScreen = spectator.watching ? spectator.feed.state.players : state.players;
+  const players = Array.isArray(onScreen) ? onScreen : [];
   const alive = players.filter((p) => !p.eliminated).length;
   const myLook = useMyLook(session.playerId, session.profile, booking.status, state.players);
 
@@ -120,6 +134,7 @@ export function useAppWiring(): AppWiring {
     entry,
     match,
     edits,
+    spectator,
     players,
     alive,
     myLook,

@@ -9,6 +9,10 @@ import { CharacterImg, FlagImg } from './PlayerArt';
  * 10. Фінал — the endgame leaderboard the game mockup draws: rank, flag + portrait + nickname,
  * then the payout. It reuses the booking roster's grid and artwork (.rosterbox / FlagImg /
  * CharacterImg) so the pre-match list and the final table keep one look.
+ *
+ * @param onRestart absent when NOBODY at this screen is playing — a spectator watching a match
+ * end has no seat to play again from and no balance to be paid into, so the button and the
+ * payout footnote are both gated on it rather than lying to a viewer about a wallet.
  */
 export function FinishView({
   state,
@@ -18,8 +22,8 @@ export function FinishView({
 }: {
   state: SurvivalState;
   me?: string;
-  busy: boolean;
-  onRestart: () => void;
+  busy?: boolean;
+  onRestart?: () => void;
 }) {
   const players = Array.isArray(state.players) ? state.players : [];
   const rows = buildFinishRows(players, state.rewards, state.winnerId);
@@ -76,11 +80,14 @@ export function FinishView({
           ' Ранги курсивом відновлено з порядку вибування: сервер шле ранг лише тим, кому платить.'}
       </p>
       {/* the payout is asynchronous — the delayed beG.getTickets effect in useTickets re-reads it */}
-      <p className="hint small">Баланс 🎟 оновлюється після виплати на main-server.</p>
-
-      <button className="primary" onClick={onRestart} disabled={busy}>
-        Зіграти ще
-      </button>
+      {onRestart && (
+        <>
+          <p className="hint small">Баланс 🎟 оновлюється після виплати на main-server.</p>
+          <button className="primary" onClick={onRestart} disabled={busy}>
+            Зіграти ще
+          </button>
+        </>
+      )}
     </div>
   );
 }

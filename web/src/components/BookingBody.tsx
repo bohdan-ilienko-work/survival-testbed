@@ -4,21 +4,9 @@
 import { MATCH_IN_PROGRESS_TEXT, type BookingStatus } from '../survival';
 import { BookingRoster } from './BookingRoster';
 import { humansBotsLabel } from './peopleWords';
-
-/**
- * "через 3 год 12 хв". The match is scheduled hours ahead, so seconds are noise until the last
- * minutes; a start that has already passed says so rather than counting backwards.
- */
-const untilText = (ms: number): string => {
-  if (!Number.isFinite(ms)) return '';
-  if (ms <= 0) return 'старт уже настав';
-  const total = Math.round(ms / 1000);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  if (hours > 0) return `через ${hours} год ${minutes} хв`;
-  if (minutes > 0) return `через ${minutes} хв ${total % 60} с`;
-  return `через ${total} с`;
-};
+// «через 3 год 12 хв» — shared with the watch screen, which answers the same question for a
+// viewer who never registered; see timeWords for why it is not spelled twice.
+import { untilText } from './timeWords';
 
 /**
  * 1а. Реєстрація — the booking popup exactly as the main menu draws it, long before the match.

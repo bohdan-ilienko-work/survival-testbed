@@ -12,14 +12,23 @@ import { reduceLobby } from './reduceLobby';
 import { reduceRound } from './reduceRound';
 import type { SurvivalState } from './state';
 
-const asObj = (args: unknown[]): any => (Array.isArray(args) ? args[0] ?? {} : args ?? {});
+/**
+ * The single payload object an event carries: jstp delivers every `survival` event as a
+ * one-element argument list, so unwrapping it is `args[0]`.
+ *
+ * Exported because the spectator feed unwraps the SAME way — its own `spectatorLobbyChanged`
+ * arrives on this identical path — and two private copies of this line are two places for the
+ * empty-payload fallback to drift apart.
+ */
+export const eventPayload = (args: unknown[]): any =>
+  Array.isArray(args) ? args[0] ?? {} : args ?? {};
 
 /**
  * Reduce a server event into the survival state.
  * Event names mirror survival-server/src/lobby/lobby.ts and fight/survivalFight.ts.
  */
 export function reduce(state: SurvivalState, ev: ServerEvent, myPlayerId?: string): SurvivalState {
-  const p = asObj(ev.args);
+  const p = eventPayload(ev.args);
 
   return (
     reduceLobby(state, ev.name, p) ??

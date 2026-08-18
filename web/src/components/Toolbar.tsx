@@ -13,6 +13,8 @@ export interface ToolbarProps {
   gwOnline: boolean;
   playerId?: string;
   step: Step;
+  /** this tab holds a spectator seat — the one button that doubles as its re-sync */
+  watching: boolean;
   onStart: () => void;
   onConnectAll: () => void;
   /** @param fresh true = forget the stored account and get a brand new mock player */
@@ -26,10 +28,12 @@ export interface ToolbarProps {
   onLeave: () => void;
   onAd: () => void;
   onQuote: () => void;
+  onWatch: () => void;
+  onStopWatching: () => void;
 }
 
 export function Toolbar(p: ToolbarProps) {
-  const { busy, gwOnline, playerId, step } = p;
+  const { busy, gwOnline, playerId, step, watching } = p;
   return (
     <section className="toolbar">
       <ToolGroup label="Стенд">
@@ -65,6 +69,19 @@ export function Toolbar(p: ToolbarProps) {
         </button>
         <button onClick={p.onLobbyStatus} disabled={!!busy}>Статус лобі</button>
         <button onClick={p.onLeave} disabled={!!busy || step === 'idle'}>Вийти</button>
+      </ToolGroup>
+
+      <ToolGroup label="Глядач">
+        {/* Deliberately NOT gated on playerId: watching needs no account, no ticket and no
+            beG.joinSurvival — that missing gate is the very thing this mode exists to prove.
+            `survival.spectate` is idempotent per socket, so the same button is both the way in
+            and the re-sync: a second call re-serves a fresh snapshot on the same seat. */}
+        <button onClick={p.onWatch} disabled={!!busy || !gwOnline} className={watching ? '' : 'primary'}>
+          {watching ? '↻ Оновити кадр' : '👁 Дивитись матч'}
+        </button>
+        <button onClick={p.onStopWatching} disabled={!!busy || !watching}>
+          Досить дивитись
+        </button>
       </ToolGroup>
 
       <ToolGroup label="У бою">
