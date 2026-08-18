@@ -5,13 +5,14 @@
 // round is a ticking deadline and must never be behind a backdrop.
 
 import { useMemo } from 'react';
-import { stepLabel, type LobbyPlayer, type SurvivalState } from '../survival';
+import { isTiebreakSpectator, stepLabel, type LobbyPlayer, type SurvivalState } from '../survival';
 import { BuyBackPanel } from './BuyBackPanel';
 import { ClientStateTable } from './ClientStateTable';
 import { FinishView } from './FinishView';
 import { humansBotsLabel } from './peopleWords';
 import { QuestionView } from './QuestionView';
 import { ResultsView } from './ResultsView';
+import { TiebreakBadge } from './TiebreakBadge';
 
 export interface StageProps {
   state: SurvivalState;
@@ -57,6 +58,7 @@ export function Stage({
         <b>{stepLabel[state.step]}</b>
         {state.round > 0 && <span>раунд {state.round}</span>}
         {state.mode && <span className="mode">{state.mode}</span>}
+        <TiebreakBadge tiebreak={state.tiebreak} now={now} />
         {secondsLeft !== null && (
           <span className={`timer ${secondsLeft <= 5 ? 'hot' : ''}`}>{secondsLeft}s</span>
         )}
@@ -100,8 +102,13 @@ export function Stage({
           )}
           {/* C2: bots are seeded from lobby open, so the bare length says nothing — split it */}
           <p>
-            гравців у лоббі: <b>{players.length || '—'}</b>
-            {players.length > 0 && <> · {humansBotsLabel(players.length, players)}</>}
+            {players.length === 0 ? (
+              <>чекаємо на гравців — ростер поки порожній</>
+            ) : (
+              <>
+                у лоббі: <b>{players.length}</b> · {humansBotsLabel(players.length, players)}
+              </>
+            )}
           </p>
         </div>
       )}
@@ -114,7 +121,15 @@ export function Stage({
         (state.question ? (
           <QuestionView
             state={state}
-            disabled={state.step === 'spectator' || state.myAnswer !== undefined}
+            // A decider is contested by a NAMED cohort; every other live player is shown the
+            // same question with nothing to win, and the server is being taught to refuse
+            // their answers. Offering them a live panel would read a silent refusal as a
+            // broken submit.
+            disabled={
+              state.step === 'spectator' ||
+              state.myAnswer !== undefined ||
+              isTiebreakSpectator(state.tiebreak, playerId)
+            }
             onAnswer={onAnswer}
           />
         ) : (

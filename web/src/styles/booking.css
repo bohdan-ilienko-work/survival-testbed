@@ -27,6 +27,9 @@
 
 .booking .top { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
 .booking .count b { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The watcher's headline is a SENTENCE now («залишилось 5 гравців»), and 26px was sized for one
+   digit — at that size the phrase wraps the card header onto three lines. */
+.booking .count b.phrase { font-size: 17px; }
 .booking .count span { color: var(--muted); }
 .booking .meta {
   display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-left: auto;

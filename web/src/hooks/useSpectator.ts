@@ -13,6 +13,7 @@ import {
   emptySpectatorFeed,
   readSpectatorSnapshot,
   reduceSpectator,
+  withSnapshotTiebreak,
   type SpectatorFeed,
 } from '../survival';
 import type { ActionDeps } from './types';
@@ -55,7 +56,9 @@ export function useSpectator(deps: ActionDeps): Spectator {
   const takeSnapshot = useCallback(
     async () => {
       const reply = await gw().call('survival', 'survival', 'spectate', [SPECTATOR_LANG]);
-      setFeed(applySpectatorSnapshot(readSpectatorSnapshot(reply)));
+      // The tiebreak block is folded in from the RAW reply — a watcher that arrives mid
+      // sudden death has no events left to learn it from. See withSnapshotTiebreak.
+      setFeed(withSnapshotTiebreak(applySpectatorSnapshot(readSpectatorSnapshot(reply)), reply));
       return reply;
     },
     [gw],

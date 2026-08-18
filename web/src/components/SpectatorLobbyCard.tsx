@@ -8,7 +8,7 @@
 import type { LobbyPlayer, SpectatorFeed } from '../survival';
 import { countHumans } from '../survival';
 import { BookingRoster } from './BookingRoster';
-import { humansBotsLabel } from './peopleWords';
+import { humansBotsLabel, playersLeftLabel } from './peopleWords';
 import { untilText } from './timeWords';
 
 /**
@@ -53,7 +53,11 @@ export function SpectatorLobbyCard({ feed, now }: { feed: SpectatorFeed; now: nu
       <div className="top">
         <div className="count">
           {/* C2: bots sit in the roster from lobby open, so a bare total is a bot census */}
-          <b>{alive}</b> <span>у грі з {total} — {humansBotsLabel(alive, alivePlayers)}</span>
+          {/* «залишилось 5 гравців», not a lone «5»: this is the number a survival match is
+              about, and the .phrase class is what keeps a whole sentence out of the 26px
+              size that was set for a single digit. */}
+          <b className="phrase">{playersLeftLabel(alive)}</b>{' '}
+          <span>з {total} — {humansBotsLabel(alive, alivePlayers)}</span>
         </div>
         <div className="meta">
           <span>стан: <b>{st.lobbyState ?? '—'}</b></span>

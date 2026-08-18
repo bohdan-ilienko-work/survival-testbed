@@ -32,3 +32,21 @@ export function humansBotsLabel(total: number, players: LobbyPlayer[]): string {
   const bots = Math.max(0, total - humans);
   return `${humans} ${playersWord(humans)} + ${bots} ${botsWord(bots)}`;
 }
+
+/**
+ * «залишилось 5 гравців» — how many are still in the fight, in words rather than as a bare
+ * number.
+ *
+ * A digit on its own is ambiguous on every screen that shows one: «5/12» beside a roster reads
+ * as a score, a slot, a page. The words say which of the two numbers is the live one — and this
+ * IS the number a survival match is about, since the whole mode is people leaving it.
+ *
+ * The verb is inflected with the noun, because Ukrainian will not let one agree without the
+ * other: «залишився 1 гравець», «залишилось 2 гравці», «залишилось 5 гравців». 11 takes the
+ * many-form («залишилось 11 гравців») exactly as `counted` above already handles for the noun.
+ */
+export function playersLeftLabel(n: number): string {
+  const tens = n % 100;
+  const verb = n % 10 === 1 && tens !== 11 ? 'залишився' : 'залишилось';
+  return `${verb} ${n} ${playersWord(n)}`;
+}

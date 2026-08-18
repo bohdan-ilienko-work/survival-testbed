@@ -108,3 +108,51 @@ export interface LastResult {
   rewardTable?: RankReward[];
   roster?: LobbyPlayer[];
 }
+
+/**
+ * WHY a sudden-death round is being played.
+ *
+ *   'all_wrong'    — nobody answered the round correctly, so the round has no honest way to
+ *                    eliminate anyone: a decider question is played instead of letting the
+ *                    whole-lobby tie throw everybody out.
+ *   'boundary_tie' — the round's own rule left two or more players inseparable on the cut line.
+ *
+ * A machine TAG and not a sentence, for the reason reasons.ts exists: the Ukrainian words are
+ * built in ./tiebreak, and a tag a newer server invents still renders as a marker (with the
+ * cause left unnamed) instead of blanking the whole badge.
+ */
+export type TiebreakReason = 'all_wrong' | 'boundary_tie';
+
+/**
+ * The sudden-death marker the client holds while one is happening.
+ *
+ * Every field but `phase` and `playerIds` is optional because the three events that fill it say
+ * different amounts: the reveal (`tiebreakPending`) knows WHY and WHEN the decider opens but has
+ * no iteration yet, `tiebreakStarted` knows the iteration and the decider's mode, and
+ * `roundResult` closes the round carrying only the reason. So the marker is MERGED across them
+ * rather than replaced — see readTiebreak — and a field nobody stated stays «сервер не сказав».
+ */
+export interface TiebreakInfo {
+  reason?: TiebreakReason;
+  /** 1-based decider round inside this tiebreak; unknown during the reveal pause */
+  iteration?: number;
+  /** the cap the server will stop at (SURVIVAL_MAX_TIEBREAK_ROUNDS) — the «2/5» denominator */
+  maxIterations?: number;
+  /** who is contesting it. Empty = the server did not say, never "nobody" */
+  playerIds: string[];
+  /**
+   * ABSOLUTE unix ms when the decider question opens — the reveal pause's own deadline, and the
+   * ONLY countdown there is in that window: the round's answer deadline is spent and
+   * `nextRoundAt` is deliberately null while a tiebreak is pending.
+   */
+  startsAt?: number;
+  /** the DECIDER's mode (MAP / NUMBER), which is not the finished round's mode */
+  mode?: RoundMode;
+  /**
+   * Where in the sudden death we are, and the one field that is always known:
+   *   'pending' — the reveal pause, no answers accepted, `startsAt` counts down
+   *   'active'  — a decider question is open right now
+   *   'done'    — it has been settled; the marker stays so the results board can say why
+   */
+  phase: 'pending' | 'active' | 'done';
+}

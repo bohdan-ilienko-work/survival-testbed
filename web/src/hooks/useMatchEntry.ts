@@ -8,7 +8,7 @@
 // ./survivalBinding next door.
 
 import type { Dispatch } from 'react';
-import { MATCH_IN_PROGRESS_TEXT, initialState, isLobbyEnded } from '../survival';
+import { MATCH_IN_PROGRESS_TEXT, NO_MATCH, initialState, isLobbyEnded } from '../survival';
 import { joinGateOpen, joinWhenLobbyOpens } from './joinPolicy';
 import { makeSurvivalBinding } from './survivalBinding';
 import { TARGETS } from './useGateway';
@@ -84,6 +84,11 @@ export function useMatchEntry(
       const res: any = await joinWhenLobbyOpens(joinIO);
       setState((s) => ({
         ...s,
+        // A NEW lobby, and the tab keeps whatever the LAST match left behind — its round
+        // number, its mode, its final board, its `iAmEliminated`. Unreset, the stepbar
+        // labelled a lobby still waiting for players «раунд 7 · CHRONO». The tickets the reply
+        // carries are set below, after this, because those belong to the player, not the lobby.
+        ...NO_MATCH,
         step: 'lobby',
         lobbyId: res?.lobbyId,
         lobbyState: res?.state,

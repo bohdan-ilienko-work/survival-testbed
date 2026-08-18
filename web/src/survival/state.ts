@@ -4,7 +4,15 @@
 // Kept apart from the reducer so that a module which only needs to NAME the state (a component,
 // a guard, the wallet helpers) never has to pull the event handling in behind it.
 
-import type { LobbyPlayer, Question, RankReward, RewardRow, RoundMode, Score } from './wire';
+import type {
+  LobbyPlayer,
+  Question,
+  RankReward,
+  RewardRow,
+  RoundMode,
+  Score,
+  TiebreakInfo,
+} from './wire';
 
 /** Flowchart steps, used only to label what the UI is showing. */
 export type Step =
@@ -60,6 +68,13 @@ export interface SurvivalState {
   eliminated: string[];
   iAmEliminated: boolean;
   buybackOpen: boolean;
+  /**
+   * The sudden-death marker, `undefined` outside one. It is deliberately NOT cleared by
+   * `roundResult`: the decider is what explains the eliminations that board is showing, and the
+   * results screen is the first moment the player has time to read why. `roundStarted` clears
+   * it — a marker left standing would label the next, ordinary round a tiebreak.
+   */
+  tiebreak?: TiebreakInfo;
 
   // ─── the private, PER-PLAYER BuyBack offer ('buyBackOffer' / getBuyBackQuote) ───
   // The price indexes THIS player's used attempts, so none of it may ever come from a

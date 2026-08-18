@@ -6,6 +6,7 @@
 // only reducer file that never needs to know who "I" am.
 
 import { asNum, asPlayers, asRewardTable, asRewards } from './guards';
+import { NO_MATCH } from './match';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
@@ -48,14 +49,15 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
     case 'fightStarted':
       return {
         ...state,
+        // A fight starts at round 0 with no board, no verdict and nobody eliminated. NO_MATCH
+        // covers the payouts too: without it a finish payload that arrives without rewards let
+        // the PREVIOUS match's table resurface under the new final, and this tab's own
+        // `iAmEliminated` from the last match put it straight into the spectator step.
+        ...NO_MATCH,
         step: 'starting',
         lobbyState: 'ACTIVE',
         onboardingEndsAt: undefined,
         players: asPlayers(p.roster ?? p.players, state.players),
-        // a new fight starts with no payouts: without this, a finish payload that arrives
-        // without rewards would let the PREVIOUS match's table resurface under the new final
-        rewards: undefined,
-        rewardTable: undefined,
       };
 
     case 'playerKickedAfterDisconnect':

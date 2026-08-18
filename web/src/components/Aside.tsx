@@ -6,7 +6,7 @@
 import type { ServerEvent } from '../gateway';
 import type { LobbyPlayer } from '../survival';
 import { CharacterImg, FlagImg } from './PlayerArt';
-import { humansBotsLabel } from './peopleWords';
+import { humansBotsLabel, playersLeftLabel } from './peopleWords';
 
 export function Aside({
   players,
@@ -26,8 +26,10 @@ export function Aside({
       {/* C2: bots are seeded from lobby open, so alive/total alone is a bot census — the
           humans/bots split is what tells a tester their second tab actually landed */}
       <h3>
-        Гравці ({alive}/{players.length}
-        {players.length > 0 && <> · {humansBotsLabel(players.length, players)}</>})
+        {/* «залишилось N гравців», not «N/M»: the alive count is the number this mode is
+            about, and a bare pair of digits beside a roster does not say which is which. */}
+        Ростер — {playersLeftLabel(alive)} з {players.length}
+        {players.length > 0 && <> · {humansBotsLabel(players.length, players)}</>}
       </h3>
       {/* Same artwork components as the booking roster — the two lists show the same
           players and must not drift into two different looks. The 🤖/🧑 emoji this replaced

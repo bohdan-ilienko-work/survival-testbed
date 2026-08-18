@@ -16,6 +16,7 @@ import { FinishView } from './FinishView';
 import { QuestionView } from './QuestionView';
 import { ResultsView } from './ResultsView';
 import { SpectatorLobbyCard } from './SpectatorLobbyCard';
+import { TiebreakBadge } from './TiebreakBadge';
 
 /**
  * A spectator can never act. The server would refuse anyway — every mutating RPC resolves its
@@ -78,6 +79,9 @@ export function SpectatorView({
         <b>👁 Глядач · {stepLabel[st.step]}</b>
         {st.round > 0 && <span>раунд {st.round}</span>}
         {st.mode && <span className="mode">{st.mode}</span>}
+        {/* The SERVER's clock: `startsAt` is an absolute server instant, and `clock` is the
+            only value on this screen that has the snapshot's skew already taken out. */}
+        <TiebreakBadge tiebreak={st.tiebreak} now={clock} />
         {feed.viewers !== undefined && <span className="viewers">глядачів {feed.viewers}</span>}
         {secondsLeft !== null && (
           <span className={`timer ${secondsLeft <= 5 ? 'hot' : ''}`}>{secondsLeft}s</span>
