@@ -20,6 +20,7 @@ export type {
   LastResult,
   LobbyPlayer,
   Question,
+  QuestionImage,
   RankReward,
   RewardRow,
   RoundMode,
@@ -39,7 +40,7 @@ export {
 } from './survival/tiebreak';
 // the one guard a component needs of its own: the results table reads each player's miss
 // straight off the score line, which is as untrusted as anything else off the wire
-export { asLastResult, asMiss } from './survival/guards';
+export { asImage, asLastResult, asMiss, asUrl } from './survival/guards';
 export {
   LOBBY_ENDED_TEXT,
   MATCH_IN_PROGRESS_TEXT,

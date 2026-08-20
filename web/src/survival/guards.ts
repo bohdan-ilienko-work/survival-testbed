@@ -4,7 +4,7 @@
 // They live together because every comment below is the same lesson learned on a different field,
 // and because the composite guards (asYears, asRewards) are built out of the scalar ones.
 
-import type { LastResult, LobbyPlayer, RankReward, RewardRow, Score } from './wire';
+import type { LastResult, LobbyPlayer, QuestionImage, RankReward, RewardRow, Score } from './wire';
 
 /**
  * Some events carry `players` as a COUNT (onboardingStarted) and others as a LIST
@@ -30,6 +30,24 @@ export const asNum = (value: unknown, fallback?: number): number | undefined => 
   }
   return fallback;
 };
+
+/**
+ * A question's picture. Both renditions or nothing: the panel shows `low` and swaps to `high`
+ * once it loads, so a pair missing either half is not something it can render — and half a
+ * picture on screen is a worse answer than none. A blank string counts as missing, because that
+ * is what an unset image field degrades to on the way through a JSON round trip.
+ */
+export const asImage = (value: unknown): QuestionImage | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const { low, high } = value as { low?: unknown; high?: unknown };
+  if (typeof low !== 'string' || low === '') return undefined;
+  if (typeof high !== 'string' || high === '') return undefined;
+  return { low, high };
+};
+
+/** A media URL off the wire — a non-empty string, or "the server did not say" */
+export const asUrl = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() !== '' ? value : undefined;
 
 /**
  * The CHRONO year strip, guarded like every other array on the wire.
