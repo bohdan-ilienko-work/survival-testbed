@@ -6,62 +6,9 @@
 // connect reply is the one message a freshly bound socket gets about broadcasts it missed.
 
 import { asBool, asLastResult, asNum, asPlayers, asTag } from './guards';
+import type { BookingLobby, BookingStatus } from './bookingTypes';
 import { initialState, type SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
-import type { LobbyPlayer } from './wire';
-
-/**
- * The lobby object main-server passes straight through from survival-server's GetActiveLobby.
- *
- * `roster` is the whole point of it: the booking popup is shown in the main menu HOURS before
- * the match while a survival connect token lives ten minutes, so there is no JSTP session to
- * ask — this reply is the only way that screen can list who signed up.
- */
-export interface BookingLobby {
-  lobbyId?: string;
-  state?: string;
-  /** everybody registered, bots included */
-  playerCount?: number;
-  /** those still in the fight — equal to playerCount while the lobby is still booking */
-  activePlayerCount?: number;
-  /** ISO string */
-  scheduledStartAt?: string;
-  round?: number;
-  /**
-   * REGISTRATION ORDER IS PART OF THE CONTRACT: the booking screen numbers its rows from the
-   * array index, because `slot` stays null until on-boarding hands the slots out. So the
-   * roster is carried through as it arrived — never sorted, filtered or de-duplicated.
-   */
-  roster: LobbyPlayer[];
-}
-
-/** A beG.getSurvivalStatus reply, guarded. */
-export interface BookingStatus {
-  /** false = survival-server never answered, so there is nothing to register for at all */
-  available?: boolean;
-  /** am I in THIS lobby — main-server matches its paid entry against the current lobbyId */
-  registered?: boolean;
-  /**
-   * C4: may joinSurvival succeed right now? `false` while `registered` is also false means a
-   * match is RUNNING — joinSurvival will only refuse, so the screen should say «матч уже йде»
-   * (MATCH_IN_PROGRESS_TEXT) instead of calling it. `undefined` = an older main-server that
-   * never said; keep the legacy behaviour of simply trying the join.
-   */
-  joinable?: boolean;
-  lobby: BookingLobby | null;
-  tickets?: number;
-  entryCost?: number;
-  freeDailyTickets?: number;
-  /**
-   * How many free daily tickets THIS call granted — a count, not a flag: getStatus returns
-   * claimFreeDailyTickets()'s result, which is 0 when today's ticket was already taken.
-   * Read as a boolean it came back undefined every single time.
-   */
-  freeDailyGranted?: number;
-  nextFreeDailyAt?: string;
-  /** when this snapshot was taken — nothing pushes it, the screen has to poll */
-  fetchedAt: number;
-}
 
 /**
  * Read a beG.getSurvivalStatus reply.
@@ -85,6 +32,8 @@ export function readBookingStatus(reply: unknown): BookingStatus {
           playerCount: asNum(raw.playerCount),
           activePlayerCount: asNum(raw.activePlayerCount),
           scheduledStartAt: asTag(raw.scheduledStartAt),
+          eventNo: asNum(raw.eventNo),
+          eventsTotal: asNum(raw.eventsTotal),
           round: asNum(raw.round),
           // no lobby means no roster, and an empty roster is not the same as "not an array"
           roster: asPlayers(raw.roster, []),

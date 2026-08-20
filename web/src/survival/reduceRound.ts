@@ -24,6 +24,8 @@ export function reduceRound(
         ...state,
         // a new round means the previous window (and its price) is history
         ...NO_OFFER,
+        // ...and the return it sold stops being news
+        lastBuyBack: undefined,
         step: state.iAmEliminated ? 'spectator' : 'question',
         round: p.round ?? state.round,
         mode: p.mode,

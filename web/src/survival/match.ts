@@ -34,6 +34,7 @@ export const NO_MATCH = {
   eliminated: [],
   iAmEliminated: false,
   buybackOpen: false,
+  lastBuyBack: undefined,
   tiebreak: undefined,
   winnerId: undefined,
   totalRounds: undefined,

@@ -68,6 +68,14 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
         </p>
       )}
 
+      {/* The roster just grew by one name; without this line the return is invisible — the
+          player sees the alive counter tick UP between rounds and reads it as a bug. */}
+      {state.lastBuyBack && (
+        <p className="buyback-note">
+          ↩ <b>{state.lastBuyBack.name}</b> викупився назад у гру
+        </p>
+      )}
+
       {/* WHY this board looks the way it does. A sudden death is not a round — it consumes no
           round number and emits no `roundStarted` — so without this line the player sees an
           extra question appear out of nowhere and, on the all-wrong path, an elimination list

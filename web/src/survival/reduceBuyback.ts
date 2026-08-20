@@ -44,6 +44,13 @@ export function reduceBuyback(
 
     case 'buyBackSuccess': {
       const mine = myPlayerId === p.playerId;
+      // The name now travels ON the event; the roster is only the fallback for an older server,
+      // because a row may not exist yet on the socket that just reconnected.
+      const fromRoster = state.players.find((pl) => pl.playerId === p.playerId)?.name;
+      const name =
+        (typeof p.name === 'string' && p.name !== '' ? p.name : undefined) ??
+        fromRoster ??
+        String(p.playerId ?? '').slice(0, 12);
       // Somebody ELSE coming back does not close my window — it only makes the roster
       // bigger, which can loosen the "too few players left" gate. Drop the stale offer
       // so the UI re-quotes instead of keeping a verdict that may no longer hold.
@@ -59,6 +66,7 @@ export function reduceBuyback(
         players: state.players.map((pl) =>
           pl.playerId === p.playerId ? { ...pl, eliminated: false } : pl,
         ),
+        lastBuyBack: { playerId: String(p.playerId ?? ''), name, round: asNum(p.round) },
       };
     }
 

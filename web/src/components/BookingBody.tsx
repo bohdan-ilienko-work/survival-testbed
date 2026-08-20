@@ -79,6 +79,13 @@ export function BookingBody({
               <span>
                 стан: <b>{lobby.state ?? '—'}</b>
               </span>
+              {/* said only when the day really holds several tournaments: «1 з 1» would read
+                  as a warning about something that is simply the normal single-event day */}
+              {lobby.eventsTotal !== undefined && lobby.eventsTotal > 1 && (
+                <span>
+                  турнір: <b>{lobby.eventNo ?? '?'} з {lobby.eventsTotal}</b>
+                </span>
+              )}
               {Number.isFinite(startsAt) && (
                 <span>
                   старт: <b>{new Date(startsAt).toLocaleString()}</b>
