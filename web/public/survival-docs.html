@@ -255,7 +255,7 @@ sequenceDiagram
 
   C->>M: beG.getSurvivalStatus()
   M->>S: gRPC GetActiveLobby{}
-  S-->>M: {lobbyId, state, playerCount, activePlayerCount,<br/>scheduledStartAt, round, roster}
+  S-->>M: {lobbyId, state, playerCount, activePlayerCount,<br/>scheduledStartAt, eventNo, eventsTotal, round, roster}
   M-->>C: {available, registered, joinable, lobby, tickets, entryCost, hosts, port, …}
   Note over C,S: клієнт не торкається survival-server —<br/>ні токена, ні плати, ні подій;<br/>екран оновлюється повторним викликом
 </pre>
@@ -273,6 +273,8 @@ sequenceDiagram
     playerCount: 48,      // усього записаних; боти є вже під час BOOKING (див. нижче)
     activePlayerCount: 48,// ще не вибулі
     scheduledStartAt: "2026-08-04T17:00:00.000Z",   // ISO-8601, UTC
+    eventNo: 2,           // котрий турнір ДНЯ це лоббі (1-базовий)
+    eventsTotal: 3,       // скільки турнірів сьогодні всього; 1/1 = звичайний день
     round: 0,
     roster: [ … ]         // ПОВНИЙ склад, у порядку реєстрації
   },
@@ -543,7 +545,7 @@ stateDiagram-v2
   <div class="scroll-x"><table>
     <thead><tr><th>Параметр</th><th class="num">Прод</th><th class="num">Дев (зараз)</th></tr></thead>
     <tbody>
-      <tr><td>Старт лоббі</td><td class="num">17:00 UTC (керується набором дня; адмінка може пересунути)</td><td class="num">під <code>INSTANT_START</code> — на найближчому тіку планувальника (1 с) після реєстрації ПЕРШОЇ людини</td></tr>
+      <tr><td>Старт лоббі</td><td class="num">за розкладом дня. День тепер може мати <b>кілька турнірів</b>: в адмінці фабрики список «Старти турнірів (UTC)», скільки записів — стільки лоббі за день, одне за одним. Кожен турнір грає власне вікно слотів набору (питання між турнірами дня не повторюються); котрий це турнір, клієнту каже <code>eventNo/eventsTotal</code> у <code>getSurvivalStatus</code>. Звичайний день = один запис 17:00</td><td class="num">під <code>INSTANT_START</code> — на найближчому тіку планувальника (1 с) після реєстрації ПЕРШОЇ людини</td></tr>
       <tr><td>Вікно онбордингу</td><td class="num">5 хв (<code>SURVIVAL_ONBOARDING_MS</code>); достроково — повне лоббі або всі люди Ready</td><td class="num">min(<code>SURVIVAL_ONBOARDING_MS</code>, <code>SURVIVAL_INSTANT_ONBOARDING_MS</code>) = 5 с</td></tr>
       <tr><td>Реєстрація</td><td>лише до онбордингу</td><td>відкрита і під час онбордингу</td></tr>
       <tr><td>Гравців</td><td class="num" colspan="2">місткість 64 (<code>SURVIVAL_MAX_PLAYERS</code>). 8 (<code>SURVIVAL_MIN_PLAYERS</code>) — це <b>поріг скасування</b>, а не ціль добору; ціль добору живе в наборі дня (<code>bots</code>) або в <code>SURVIVAL_BOT_FILL_TO</code>, а ефективний поріг скасування = min(ціль, 8). Боти реально грають</td></tr>
@@ -804,22 +806,14 @@ stateDiagram-v2
   приватною подією <code>buyBackDenied {playerId, reason}</code> з тим самим тегом. Невдала чи відмовлена спроба
   <b>не спалює спробу</b> — <code>attempt</code> у наступній квоті той самий.</p>
 
-  <h3>Таблиця цін: база спроби × множник смуги раундів</h3>
-  <div class="scroll-x"><table class="tabular">
-    <thead><tr><th>Викуп</th><th>Раунди 1–5 (×1)</th><th>6–10 (×2)</th><th>11–15 (×3)</th></tr></thead>
-    <tbody>
-      <tr><td>1-й</td><td>2</td><td>4</td><td>6</td></tr>
-      <tr><td>2-й</td><td>4</td><td>8</td><td>12</td></tr>
-      <tr><td>3-й</td><td>10</td><td>20</td><td>30</td></tr>
-      <tr><td>4-й</td><td>15</td><td>30</td><td>45</td></tr>
-      <tr><td>5-й</td><td>25</td><td>50</td><td>75</td></tr>
-    </tbody>
-  </table></div>
-  <p class="caption">Пізніші раунди тримають останній множник. Ціна додатково обрізається до
-  <b>100 тікетів</b> — це ліміт однієї операції на main-server. Уся таблиця конфігурується через
+  <h3>Ціна: <b>1 тікет</b> — кожна спроба, будь-який раунд</h3>
+  <p class="caption">Продуктове рішення: пласка ціна. Механізм цінової таблиці нікуди не дівся —
   <code>SURVIVAL_BUYBACK_FIXED_COSTS</code> / <code>_ROUND_BAND_SIZE</code> /
-  <code>_ROUND_MULTIPLIERS</code> / <code>_MAX_USES</code>, тож не хардкодь її в клієнті: бери
-  <code>cost</code> з оффера або з <code>getBuyBackQuote</code>. Не кешуй ціну між раундами.</p>
+  <code>_ROUND_MULTIPLIERS</code> / <code>_MAX_USES</code> живі, просто дефолти тепер
+  <code>1,1,1,1,1</code> × <code>1</code> (стара крива була <code>2,4,10,15,25</code> зі
+  множниками смуг раундів). Тому як і раніше <b>не хардкодь ціну в клієнті</b>: бери
+  <code>cost</code> з оффера або з <code>getBuyBackQuote</code> — одна зміна env поверне
+  прогресію, і зашита одиниця збреше.</p>
 
   <h3>Причини відмови (RPC-помилка і приватна подія <code>buyBackDenied</code> — той самий тег)</h3>
   <div class="scroll-x"><table>
@@ -899,15 +893,16 @@ rewardTable: [ { gems, tickets }, … ]                   // що платить
       <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, players: [{playerId, slot, isBot}]</code> — це урізаний список, не рядки ростера. Повний склад із ботами і слотами прилітає окремим <code>rosterUpdate</code>, який ця подія тригерить</td></tr>
       <tr><td><code>roundStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, mode, question, deadline, durationMs, activePlayers</code> (§6)</td></tr>
       <tr><td><code>answerReceived</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — самої відповіді немає</td></tr>
-      <tr><td><code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roundNumber</code> (<b>НЕ</b> <code>round</code>), <code>mode, scores, eliminated, correctAnswer</code> (<b>НЕ</b> <code>correct</code>) + опційні <code>tiebreakPlayerIds</code>, <code>roundDelta</code>, <code>nextRoundAt</code> (§6)</td></tr>
-      <tr><td><code>tiebreakStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, mode, playerIds, question, durationMs</code>. Дедлайн лише всередині <code>question.deadline</code> — top-level <code>deadline</code> тут <b>НЕМА</b></td></tr>
+      <tr><td><code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roundNumber</code> (<b>НЕ</b> <code>round</code>), <code>mode, scores, eliminated, correctAnswer</code> (<b>НЕ</b> <code>correct</code>) + опційні <code>tiebreakPlayerIds</code>, <code>tiebreakReason</code> (<code>all_wrong | boundary_tie</code> — ЧОМУ грався додатковий), <code>roundDelta</code>, <code>nextRoundAt</code>, <code>buybackUnavailableReason</code> (байбека не буде — пауза на 5 с довша) (§6)</td></tr>
+      <tr><td><code>tiebreakPending</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, reason, mode, playerIds, startsAt, maxIterations, roundReveal:{mode, correctAnswer, scores}</code> — пауза-розкриття перед додатковим питанням (3 с, <code>SURVIVAL_TIEBREAK_REVEAL_MS</code>): покажи відповіді раунду з <code>roundReveal</code> і рахуй до <code>startsAt</code>. Відповіді ще НЕ приймаються — вікно відкриє <code>tiebreakStarted</code></td></tr>
+      <tr><td><code>tiebreakStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, reason, mode, playerIds, question, deadline, durationMs, maxIterations</code> — <code>deadline</code> тепер і top-level, дзеркалом <code>roundStarted</code> (раніше жив лише всередині <code>question</code>)</td></tr>
       <tr><td><code>tiebreakResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, mode, correctAnswer, scores</code>; при детермінованому розриві натомість <code>round, mode, resolvedBy:"deterministic", playerIds, scores</code> — без <code>iteration</code>, без <code>correctAnswer</code>, і в цих <code>scores</code> немає поля <code>answer</code></td></tr>
       <tr><td><code>playerEliminated</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
-      <tr><td><code>buybackWindowOpen</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, windowMs, closesAt</code> — без цін. <code>closesAt</code> <b>дорівнює</b> <code>roundResult.nextRoundAt</code>: вікно викупу і є паузою перед наступним раундом</td></tr>
+      <tr><td><code>buybackWindowOpen</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, eliminatedIds, botIds, windowMs, closesAt</code> — без цін. <code>botIds</code> — боти, що мають намір викупитись: вікно з порожнім <code>eliminatedIds</code> і непорожнім <code>botIds</code> — не баг, відлік справжній. <code>closesAt</code> <b>дорівнює</b> <code>roundResult.nextRoundAt</code>: вікно викупу і є паузою перед наступним раундом</td></tr>
       <tr><td><code>buybackWindowClosed</code></td><td><span class="tag bcast">лоббі</span></td><td>лише <code>round</code> — і означає «всі викупи вже проведені» (§7)</td></tr>
       <tr><td><code>buyBackOffer</code> / <code>buyBackDenied</code></td><td><span class="tag private">приватні</span></td><td>див. §7; завжди несуть <code>playerId</code> адресата — звіряй зі своїм. <code>buyBackDenied</code> — <code>{playerId, reason}</code></td></tr>
       <tr><td><code>ticketsUpdated</code></td><td><span class="tag private">приватна</span></td><td><code>{playerId, balance, reason, delta?}</code> (§8). Адресується <b>по <code>playerId</code></b>, не по лоббі; <code>delta</code> просто <b>відсутнє</b>, коли рух нульовий або невідомий</td></tr>
-      <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — ціни нема (гаманець гравця)</td></tr>
+      <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, name, round</code> — імʼя, щоб екран сказав ХТО повернувся без гонки з ростером; ціни нема (гаманець гравця)</td></tr>
       <tr><td><code>playerDisconnected</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
       <tr><td><code>playerReconnected</code></td><td><span class="tag private">приватна</span></td><td><code>playerId, round, state, question?, deadline?, answered?</code> — три останні лише коли для гравця відкрите питання. Іде <b>лише тому, хто перепідключився</b>, на відміну від <code>playerDisconnected</code></td></tr>
       <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId, totalRounds, rewards: [{playerId, rank, gems, tickets}], rewardTable: [{gems, tickets}, …]</code>. <code>rewards</code> — що реально виплачено кожному ГРАВЦЮ (лише люди), <code>rewardTable</code> — що платить кожне МІСЦЕ (індекс 0 = 1-ше); саме таблиця дозволяє підписати ранг бота, якому виплат не буде (§8)</td></tr>
