@@ -164,3 +164,21 @@
 /* Answers are raw JSON with no spaces to break on. Without this one row widens the table, the
    table widens the grid column, and the page grows a horizontal scrollbar. */
 .results td code { overflow-wrap: anywhere; }
+
+/* ── the question's picture and sound ────────────────────────────────────────────────────── */
+/* Capped by HEIGHT rather than width: questions carry portraits and panoramas alike, and a
+   width cap lets a tall one push the answer buttons off the screen. */
+.question-media { margin: 10px 0 14px; }
+.question-image {
+  display: block; max-width: 100%; max-height: 320px;
+  border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
+}
+.question-audio { display: block; width: 100%; max-width: 420px; margin-top: 8px; }
+.media-error {
+  margin: 0; padding: 10px 12px; font-size: 13px; line-height: 1.5;
+  color: var(--warn, #e0a458); border: 1px dashed var(--line); border-radius: 10px;
+}
+.media-error code, .media-urls code { overflow-wrap: anywhere; }
+.media-urls { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.media-urls summary { cursor: pointer; }
+.media-urls p { margin: 6px 0 0; overflow-wrap: anywhere; }

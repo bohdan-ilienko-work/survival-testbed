@@ -18,8 +18,9 @@
 
 import { useEffect, useState } from 'react';
 import { MapPicker } from '../MapPicker';
-import type { SurvivalState } from '../survival';
+import { asImage, asUrl, type SurvivalState } from '../survival';
 import { ChronoPairing } from './ChronoPairing';
+import { QuestionMedia } from './QuestionMedia';
 import { useAnswerSubmit } from './useAnswerSubmit';
 
 export function QuestionView({
@@ -74,6 +75,11 @@ export function QuestionView({
         </div>
       )}
       <h2>{q.text ?? `Питання (${q.mode})`}</h2>
+
+      {/* Guarded off the wire rather than trusted from the question spread: these come straight
+          from the payload, and a half-filled pair or a non-string URL must read as "no media"
+          instead of reaching an <img> as an object. */}
+      <QuestionMedia image={asImage(q.imageUrl)} audio={asUrl(q.audioUrl)} />
 
       {q.mode === 'QUESTION' && (
         <div className="options">

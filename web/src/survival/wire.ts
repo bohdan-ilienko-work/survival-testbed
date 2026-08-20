@@ -45,8 +45,22 @@ export interface Question {
    * itself is the address space of the answer and never gets reordered on the client.
    */
   years?: number[];
-  imageUrl?: string;
+  /**
+   * The question's picture, as questions-api stores it: a small rendition to show at once and a
+   * full one to load behind it. An OBJECT, not a URL — it was typed `string` here while the
+   * server sent the pair, so nothing could have rendered it even once the server started
+   * sending one. `null` is the server saying the question has no picture.
+   */
+  imageUrl?: QuestionImage | null;
+  /** The question's sound, `null` when it has none. One URL, unlike the image's two renditions. */
+  audioUrl?: string | null;
   deadline?: number;
+}
+
+/** The two renditions of a question's picture — see {@link Question.imageUrl} */
+export interface QuestionImage {
+  low: string;
+  high: string;
 }
 
 export interface Score {
