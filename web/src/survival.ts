@@ -50,7 +50,7 @@ export {
   reasonWithTag,
 } from './survival/reasons';
 export { applyBuyBackQuote, applyTicketBalance } from './survival/wallet';
-export type { BookingLobby, BookingStatus } from './survival/booking';
+export type { BookingLobby, BookingStatus } from './survival/bookingTypes';
 export {
   applyConnectReply,
   readBookingStatus,

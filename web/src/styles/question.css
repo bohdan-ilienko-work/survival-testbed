@@ -140,6 +140,13 @@
 /* The line that explains a board a sudden death produced. It sits ABOVE the table on purpose:
    on an all-wrong round every row reads ❌ and the elimination list matches no column at all,
    so the explanation has to be read before the numbers, not after them. */
+/* the «somebody bought back» line — good news, so green where the tiebreak note is red */
+.buyback-note {
+  margin: 6px 0 10px; padding: 8px 12px; font-size: 13px; line-height: 1.5;
+  border: 1px solid var(--line); border-radius: 10px; background: rgba(80, 200, 120, .08);
+}
+.buyback-note b { color: var(--good, #5dc878); }
+
 .tiebreak-note {
   background: var(--bad-soft); border: 1px solid var(--bad-line); color: var(--text);
   padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);

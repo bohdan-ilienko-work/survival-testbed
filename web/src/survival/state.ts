@@ -69,6 +69,13 @@ export interface SurvivalState {
   iAmEliminated: boolean;
   buybackOpen: boolean;
   /**
+   * Who bought back into the fight, `undefined` when nobody has since the last round opened.
+   * Kept through the results screen for the same reason the tiebreak marker is — the roster
+   * quietly growing by one name is unreadable without a line saying WHO returned — and cleared
+   * by `roundStarted`, when the return stops being news.
+   */
+  lastBuyBack?: { playerId: string; name: string; round?: number };
+  /**
    * The sudden-death marker, `undefined` outside one. It is deliberately NOT cleared by
    * `roundResult`: the decider is what explains the eliminations that board is showing, and the
    * results screen is the first moment the player has time to read why. `roundStarted` clears
