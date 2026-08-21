@@ -5,18 +5,47 @@
 // buybackAffordable on its old `false`, which kept the priced «Викупитись» button dead for the
 // rest of the window right next to a chip showing enough tickets to pay for it.
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { applyTicketBalance, type Step } from '../survival';
 import type { ActionDeps } from './types';
+
+/** One buyable pack, exactly as the server describes it. Prices never live on this side. */
+export interface TicketPack {
+  id: number;
+  tickets: number;
+  gems: number;
+}
 
 export interface Tickets {
   grantTickets: () => Promise<unknown>;
   refreshTickets: () => Promise<unknown>;
+  /** What `beG.getTickets` last offered, and the gem balance it came with. */
+  packs: TicketPack[];
+  gems?: number;
+  buyTickets: (packId: number) => Promise<unknown>;
 }
 
 /** @param step the client's own step — the payout re-read below is armed by it and nothing else */
 export function useTickets(deps: ActionDeps, step: Step): Tickets {
-  const { gw, run, pushLog, setState } = deps;
+  const { gw, run, runInDialog, pushLog, setState } = deps;
+  const [packs, setPacks] = useState<TicketPack[]>([]);
+  const [gems, setGems] = useState<number | undefined>(undefined);
+
+  /** The pack list rides on the ordinary balance read, so nothing needs a second round trip. */
+  const readOffer = (res: any) => {
+    const list = Array.isArray(res?.packs) ? res.packs : [];
+    setPacks(
+      list
+        .filter((p: any) => p && typeof p === 'object')
+        .map((p: any, index: number) => ({
+          id: Number.isFinite(p.id) ? Number(p.id) : index,
+          tickets: Number(p.tickets) || 0,
+          gems: Number(p.gems) || 0,
+        }))
+        .filter((p: TicketPack) => p.tickets > 0 && p.gems > 0),
+    );
+    if (Number.isFinite(res?.gems)) setGems(Number(res.gems));
+  };
 
   const grantTickets = () =>
     run('grant 50 tickets', async () => {
@@ -30,8 +59,23 @@ export function useTickets(deps: ActionDeps, step: Step): Tickets {
       const res: any = await gw().call('main', 'beG', 'getTickets', []);
       // beG.getTickets also grants the free daily ticket, so its reply can be a real movement
       setState((s) => applyTicketBalance(s, res?.tickets ?? res, { reason: 'refresh' }));
+      readOffer(res);
       return res;
     }).catch(() => undefined);
+
+  /**
+   * The real purchase path: gems out through the shop, tickets in through the same wallet the
+   * free daily uses. Its refusal belongs INSIDE the dialog — «не вистачає кристалів» is an
+   * answer to what was just clicked, not a stage-level failure.
+   */
+  const buyTickets = (packId: number) =>
+    runInDialog(`beG.buySurvivalTickets(${packId})`, async () => {
+      const res: any = await gw().call('main', 'beG', 'buySurvivalTickets', [packId]);
+      setState((s) => applyTicketBalance(s, res?.tickets, { reason: 'purchase' }));
+      if (Number.isFinite(res?.gems)) setGems(Number(res.gems));
+      pushLog(`куплено 🎟 ${res?.bought ?? '?'} за 💎 ${res?.spentGems ?? '?'}`);
+      return res;
+    });
 
   // After the final: survival-server only REPORTS the result (ProcessSurvivalResult) and
   // main-server pays in its own time, so a balance read at the moment of 'lobbyFinished' is
@@ -55,5 +99,5 @@ export function useTickets(deps: ActionDeps, step: Step): Tickets {
     // the payout read further into the future while events keep arriving.
   }, [step, gw, pushLog, setState]);
 
-  return { grantTickets, refreshTickets };
+  return { grantTickets, refreshTickets, packs, gems, buyTickets };
 }

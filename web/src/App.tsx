@@ -51,6 +51,8 @@ export default function App() {
         onLeave={entry.leaveSurvival}
         onAd={match.recordAdView}
         onQuote={w.openQuote}
+        onRules={w.openRules}
+        onBuyTickets={w.openTicketShop}
         watching={spectator.watching}
         onWatch={spectator.watch}
         onStopWatching={spectator.stopWatching}
@@ -106,6 +108,7 @@ export default function App() {
         alive={alive}
         booking={w.booking}
         match={match}
+        tickets={w.tickets}
         edits={w.edits}
         myLook={w.myLook}
         onCharacter={w.openCharacterEditor}

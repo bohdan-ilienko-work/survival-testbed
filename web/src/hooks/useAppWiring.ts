@@ -45,6 +45,8 @@ export interface AppWiring {
   openLobbyStatus: () => void;
   openQuote: () => void;
   openCharacterEditor: () => void;
+  openRules: () => void;
+  openTicketShop: () => void;
 }
 
 export function useAppWiring(): AppWiring {
@@ -147,6 +149,9 @@ export function useAppWiring(): AppWiring {
   const openBooking = () => dialogs.open('booking', booking.refresh);
   const openLobbyStatus = () => dialogs.open('lobby', match.lobbyStatus);
   const openQuote = () => dialogs.open('quote', match.quoteBuyBack);
+  const openRules = () => dialogs.open('rules');
+  // Opens on the current offer: the packs and the gem balance ride on the ordinary balance read.
+  const openTicketShop = () => dialogs.open('tickets', tickets.refreshTickets);
   const openCharacterEditor = () =>
     // Refresh what the editor calls «зараз»: without it the editor falls back to the roster's
     // registration-time copy, which a previous edit already invalidated. A miss only means that
@@ -174,5 +179,7 @@ export function useAppWiring(): AppWiring {
     openLobbyStatus,
     openQuote,
     openCharacterEditor,
+    openRules,
+    openTicketShop,
   };
 }

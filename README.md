@@ -91,12 +91,40 @@ SURVIVAL_MIN_PLAYERS=4
 SURVIVAL_ONBOARDING_MS=15000
 SURVIVAL_ROUND_MS=20000
 SURVIVAL_BUYBACK_MS=10000
+SURVIVAL_TIMER_GRACE_MS=2000
 SURVIVAL_ROUND_START_DELAY_MS=2000
 SURVIVAL_START_HOUR_UTC=17
 SURVIVAL_DISCONNECT_GRACE_MS=30000
 SURVIVAL_MAX_ROUNDS=60
 SURVIVAL_BOT_ACCURACY=0.6
 ```
+
+`SURVIVAL_TIMER_GRACE_MS` is the one knob nothing on screen reflects, deliberately.
+Every timed phase is advertised to clients as an absolute instant — `roundStarted.deadline`,
+`buybackWindowOpen.closesAt`, `roundResult.nextRoundAt`, `onboardingStarted.closesAt` — and the
+server now acts on those instants this much LATER than it tells anyone. Two things follow:
+
+* a phase never changes while a client's countdown still reads above zero, whatever its clock
+  drift or frame rate is doing;
+* an answer or a BuyBack sent as the clock hits zero still lands, instead of losing to its own
+  flight time.
+
+Set it to `0` to reproduce the old behaviour exactly. Nothing in any broadcast carries it, so a
+client cannot tell it exists — which is the point.
+
+**A round no longer ends early when everyone has answered.** It runs its full window, every time.
+In the testbed that is most visible with bots, who answer in the first seconds: the board sits
+until the clock runs out. The answer badge says «відповідь надіслано · чекаємо на таймер» so a
+tester can tell waiting from hanging.
+
+### Buying tickets with gems
+
+The «Купити 🎟» button calls `beG.buySurvivalTickets(packId)` on main-server — the same call a
+real client makes. It needs a main-server that HAS that handler
+(`applications/beGenius/api/beG/buySurvivalTickets.js` plus `buyTickets` in `lib/survival.js`);
+an older one answers `no method beG.buySurvivalTickets`, and the dialog says so rather than
+failing quietly. The pack list and their gem prices come from the server on `beG.getTickets`, so
+nothing about the price lives in this repo.
 
 `INTERNAL_API_TOKEN=testbed-token` is shared by questions-api (which gates
 `GET /internal/survival_questions` on the `x-internal-token` header) and

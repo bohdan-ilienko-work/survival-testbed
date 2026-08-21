@@ -70,11 +70,20 @@ export function BookingBody({
             </p>
           )}
           <div className="top">
-            <div className="count">
-              {/* C2: bots are in the roster from lobby open, so the bare total is mostly bots —
-                  an unsplit «7 гравців» would be a claim about two humans */}
-              <b>{total}</b> <span>зареєстровано — {humansBotsLabel(total, roster)}</span>
-            </div>
+            {/* Nobody yet: a counter reading «0 зареєстровано — 0 людей, 0 ботів» is three
+                numbers saying one thing, and the one thing is better said in words. The
+                counter comes back the moment there is anything to count. */}
+            {total === 0 ? (
+              <div className="count empty">
+                <span>Ще ніхто не зареєструвався — записуйся першим.</span>
+              </div>
+            ) : (
+              <div className="count">
+                {/* C2: bots are in the roster from lobby open, so the bare total is mostly bots —
+                    an unsplit «7 гравців» would be a claim about two humans */}
+                <b>{total}</b> <span>зареєстровано — {humansBotsLabel(total, roster)}</span>
+              </div>
+            )}
             <div className="meta">
               <span>
                 стан: <b>{lobby.state ?? '—'}</b>

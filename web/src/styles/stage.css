@@ -108,3 +108,13 @@ main > * { min-width: 0; }
   background: var(--surface); color: var(--muted); font-size: 11px;
   padding: 3px 10px; border-radius: var(--r-pill); border: 1px solid var(--line);
 }
+
+/* ── the knocked-out player's own board ──────────────────────────────────────────────────── */
+/* Sits above the results table: whether an offer is coming has to be read before the list of
+   who survived. `.final` is the version with no way back — a different thing from a window
+   that has simply not opened yet, and it must not look like one. */
+.panel.eliminated h2 { font-size: 18px; }
+.panel.eliminated .hint.small { font-size: 12px; color: var(--muted); }
+.panel.eliminated.final {
+  border-color: var(--bad-line); background: var(--bad-soft);
+}

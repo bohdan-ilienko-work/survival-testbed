@@ -1,0 +1,75 @@
+// The rules of the mode, in one place, in the words a player would use.
+//
+// The testbed had every rule scattered through hints beside the control that enforces it — fine
+// while testing one thing, useless when the question is "what is this mode". It is also the copy
+// the client shows behind its own Rules button, so a rule that reads badly here reads badly
+// there: this screen is where the wording gets tried out.
+
+import { Modal } from '../ui/Modal';
+
+/** One rule: a heading you can scan for, and the sentence under it. */
+const RULES: { title: string; body: string }[] = [
+  {
+    title: 'Один турнір — один квиток',
+    body:
+      'Вхід коштує квиток. Один безкоштовний дають раз на добу (UTC), решту можна виграти ' +
+      'призом, отримати за рекламу або купити за кристали.',
+  },
+  {
+    title: 'Усі відповідають на те саме питання одночасно',
+    body:
+      'Раунд відкривається для всіх разом і триває до кінця свого вікна — навіть якщо всі вже ' +
+      'відповіли. Таймер на екрані і є те, що завершує раунд.',
+  },
+  {
+    title: 'Відповідь зараховується до нуля',
+    body:
+      'Сервер приймає відповідь ще кілька секунд після того, як лічильник показав нуль, тож ' +
+      'натиснуте в останню мить не програє власному пінгу. У інтерфейсі цього запасу не видно.',
+  },
+  {
+    title: 'Чотири формати',
+    body:
+      'QUESTION — вибрати варіант. NUMBER — назвати число, виграє найближче. MAP — поставити ' +
+      'мітку на карті, рахується відстань. CHRONO — розставити три події за роками.',
+  },
+  {
+    title: 'Вибуття',
+    body:
+      'Наприкінці раунду частина гравців вибуває. У NUMBER і MAP межу задає похибка раунду: ' +
+      'хто промахнувся більше за поріг — вибуває.',
+  },
+  {
+    title: 'Нічия вирішується додатковим питанням',
+    body:
+      'Якщо раунд нікого не відділив (усі помилились або всі однаково близькі), приходить ' +
+      'додаткове питання лише для тих, кого він не розвів. Воно не рахується окремим раундом.',
+  },
+  {
+    title: 'Викуп',
+    body:
+      'Вибувши, можна повернутись за квитки, поки відкрите вікно викупу — воно триває рівно ' +
+      'паузу між раундами. Кожна наступна спроба дорожча. У фіналі на двох і коли гравців ' +
+      'лишилось замало, вікно не відкривається взагалі.',
+  },
+  {
+    title: 'Вибув — не вигнали',
+    body:
+      'Матч лишається відкритим: видно ростер і наступні раунди. Вийти можна лише самому.',
+  },
+];
+
+export function RulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} title="Правила Survival" onClose={onClose}>
+      <div className="rules">
+        {RULES.map((rule) => (
+          <section key={rule.title}>
+            <h4>{rule.title}</h4>
+            <p>{rule.body}</p>
+          </section>
+        ))}
+      </div>
+    </Modal>
+  );
+}

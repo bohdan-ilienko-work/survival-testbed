@@ -41,6 +41,8 @@ export function reduceRound(
         // the pause this instant measured is over — the round it announced is the one starting
         nextRoundAt: undefined,
         myAnswer: undefined,
+        // Belongs to the round that just ended, never to the one starting now.
+        roundBuybackUnavailableReason: undefined,
         answeredCount: 0,
         scores: [],
         correctAnswer: undefined,
@@ -83,6 +85,8 @@ export function reduceRound(
         nextRoundAt: asNum(p.nextRoundAt),
         eliminated,
         iAmEliminated: state.iAmEliminated || iAmOut,
+        // Present only when the round refused a window to everyone it knocked out.
+        roundBuybackUnavailableReason: asTag(p.buybackUnavailableReason),
         // WHY this board looks the way it does. Deliberately not cleared here — see
         // mergeRoundResultTiebreak.
         tiebreak: mergeRoundResultTiebreak(state.tiebreak, p),
@@ -133,6 +137,8 @@ export function reduceRound(
         // «наступний раунд» countdown that no longer holds
         nextRoundAt: undefined,
         myAnswer: undefined,
+        // Belongs to the round that just ended, never to the one starting now.
+        roundBuybackUnavailableReason: undefined,
         // The server counts the DECIDER's answers from zero, so a count left over from the round
         // that caused the tiebreak would sit above the decider claiming answers nobody has sent.
         answeredCount: 0,

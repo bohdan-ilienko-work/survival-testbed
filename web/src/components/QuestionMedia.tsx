@@ -17,10 +17,13 @@ import type { QuestionImage } from '../survival';
 function Picture({ image }: { image: QuestionImage }) {
   const [src, setSrc] = useState(image.low);
   const [failed, setFailed] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     setSrc(image.low);
     setFailed(false);
+    // A new question must never inherit the previous one's zoom.
+    setZoomed(false);
     const full = new Image();
     full.onload = () => setSrc(image.high);
     full.src = image.high;
@@ -37,12 +40,29 @@ function Picture({ image }: { image: QuestionImage }) {
   }
 
   return (
-    <img
-      className="question-image"
-      src={src}
-      alt=""
-      onError={() => setFailed(true)}
-    />
+    <>
+      <img
+        className="question-image"
+        src={src}
+        alt=""
+        title="натисни, щоб збільшити"
+        onClick={() => setZoomed(true)}
+        onError={() => setFailed(true)}
+      />
+      {/* Enlarged, over everything, and dismissed by a tap ANYWHERE — including on the picture
+          itself. A zoom that can only be closed by finding a small × is a zoom that covers the
+          answers for the rest of the round; the round has a deadline running underneath it. */}
+      {zoomed && (
+        <div
+          className="question-zoom"
+          role="presentation"
+          onClick={() => setZoomed(false)}
+        >
+          <img src={image.high} alt="" onError={() => setZoomed(false)} />
+          <span className="zoom-hint">тап будь-де — повернути розмір</span>
+        </div>
+      )}
+    </>
   );
 }
 

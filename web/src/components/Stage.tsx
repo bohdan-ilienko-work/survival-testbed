@@ -12,6 +12,7 @@ import { FinishView } from './FinishView';
 import { humansBotsLabel } from './peopleWords';
 import { untilText } from './timeWords';
 import { QuestionView } from './QuestionView';
+import { EliminatedNotice } from './EliminatedNotice';
 import { ResultsView } from './ResultsView';
 import { TiebreakBadge } from './TiebreakBadge';
 
@@ -145,6 +146,10 @@ export function Stage({
             <p className="hint">Питання ще не прийшло від сервера.</p>
           </div>
         ))}
+
+      {/* Above the board it explains: a knocked-out player has to know whether an offer is
+          coming before they read a table of who survived. */}
+      <EliminatedNotice state={state} />
 
       {state.step === 'results' && <ResultsView state={state} me={playerId} now={now} />}
 

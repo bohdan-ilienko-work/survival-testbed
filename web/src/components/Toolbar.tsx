@@ -28,6 +28,10 @@ export interface ToolbarProps {
   onLeave: () => void;
   onAd: () => void;
   onQuote: () => void;
+  /** the mode's rules, in words — the same copy the client shows behind its Rules button */
+  onRules: () => void;
+  /** gems → tickets, the real purchase path */
+  onBuyTickets: () => void;
   onWatch: () => void;
   onStopWatching: () => void;
 }
@@ -56,6 +60,7 @@ export function Toolbar(p: ToolbarProps) {
         </button>
         <button onClick={p.onGrantTickets} disabled={!!busy || !playerId}>+50 🎟</button>
         <button onClick={p.onRefreshTickets} disabled={!!busy || !playerId}>Тікети</button>
+        <button onClick={p.onBuyTickets} disabled={!!busy || !playerId}>Купити 🎟</button>
       </ToolGroup>
 
       <ToolGroup label="Survival">
@@ -68,6 +73,9 @@ export function Toolbar(p: ToolbarProps) {
           Зайти в Survival
         </button>
         <button onClick={p.onLobbyStatus} disabled={!!busy}>Статус лобі</button>
+        {/* Gated on nothing: the rules are just text, and they are most wanted before anybody
+            has signed in or connected anything. */}
+        <button onClick={p.onRules}>Правила</button>
         <button onClick={p.onLeave} disabled={!!busy || step === 'idle'}>Вийти</button>
       </ToolGroup>
 

@@ -58,6 +58,16 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
     <div className="panel results">
       <h2>Результат раунду {state.round}</h2>
 
+      {/* FIRST on the board, before the countdown and the table: the roster just grew by one
+          name, and read after the numbers the return is invisible — the player sees the alive
+          counter tick UP between rounds and takes it for a bug. Yellow, like the client's own
+          announcement line: it is news, not a status. */}
+      {state.lastBuyBack && (
+        <p className="buyback-note">
+          ↩ <b>{state.lastBuyBack.name}</b> викупився назад у гру
+        </p>
+      )}
+
       {/* C1: the server's own absolute instant of the next roundStarted. On a round that opened
           a BuyBack window it EQUALS the window's closesAt (the window IS the pause); on one that
           opened none this is the only countdown the pause has. `undefined` = an older server
@@ -65,14 +75,6 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
       {state.nextRoundAt !== undefined && (
         <p className="countdown">
           наступний раунд через {Math.max(0, Math.ceil((state.nextRoundAt - now) / 1000))} с
-        </p>
-      )}
-
-      {/* The roster just grew by one name; without this line the return is invisible — the
-          player sees the alive counter tick UP between rounds and reads it as a bug. */}
-      {state.lastBuyBack && (
-        <p className="buyback-note">
-          ↩ <b>{state.lastBuyBack.name}</b> викупився назад у гру
         </p>
       )}
 
@@ -98,6 +100,16 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
 
       {state.correctAnswer !== undefined && !correctPoint && (
         <p>правильна відповідь: <code>{JSON.stringify(state.correctAnswer)}</code></p>
+      )}
+
+      {/* My own answer, from what THIS client sent — not from the score line. The server's row
+          can arrive without it (an answer that landed late, an elimination that got there
+          first), and a player whose number vanishes at the reveal reads it as "my answer did
+          not count". The table below still shows the server's version; this is what I sent. */}
+      {state.myAnswer !== undefined && (
+        <p className="my-answer">
+          твоя відповідь: <code>{JSON.stringify(state.myAnswer)}</code>
+        </p>
       )}
 
       {byMiss && (

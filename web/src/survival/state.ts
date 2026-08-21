@@ -98,6 +98,13 @@ export interface SurvivalState {
   buybackClosesAt?: number;
   /** machine tag — set means "cannot buy back at all right now" */
   buybackUnavailableReason?: string;
+  /**
+   * Why the LAST round opened no buy-back window at all ('two_player_round' | 'too_few_players'),
+   * straight off roundResult. Distinct from buybackUnavailableReason, which is this player's own
+   * denial from a window that did open — and it is the only thing that can tell a knocked-out
+   * player no offer is coming, since a window that never opens emits no event of its own.
+   */
+  roundBuybackUnavailableReason?: string;
 
   /** authoritative balance, pushed by the server on every change ('ticketsUpdated') */
   tickets?: number;

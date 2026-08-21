@@ -97,8 +97,16 @@ export function ChronoPairing({
 
       {events.map((ev, i) => {
         const mine = yearOf(i);
+        // Once the round is closed an event with no year is not "still waiting" — it is an
+        // event this player never answered, and it has to read as switched off rather than as
+        // a row that could still be filled.
+        const unplaced = disabled && mine === -1;
         return (
-          <div className={`pair-row${over === i ? ' over' : ''}`} key={ev.id} {...dropProps(i)}>
+          <div
+            className={`pair-row${over === i ? ' over' : ''}${unplaced ? ' unplaced' : ''}`}
+            key={ev.id}
+            {...dropProps(i)}
+          >
             <div className="pair-event">
               {/* The row's own year is a chip too, so it can be dragged straight onto another row
                   (a swap) or back into the pool (un-pair) without hunting for it in a strip. */}
@@ -113,7 +121,7 @@ export function ChronoPairing({
                 }
                 {...(mine === -1 || disabled ? {} : dragProps(mine, `slot:${i}`))}
               >
-                {mine === -1 ? '—' : years[mine]}
+                {mine === -1 ? (unplaced ? 'не поставлено' : '—') : years[mine]}
               </span>
               <span className="pair-text">{ev.text}</span>
             </div>

@@ -108,6 +108,11 @@
 
 /* The target under the pointer. The inset ring rather than a thicker border, so nothing on the
    row moves by a pixel when the highlight comes and goes. */
+/* An event the player never paired, seen after the round closed: dimmed, and its slot says so
+   in words. It is not a wrong answer — it is no answer, and the two must not look alike. */
+.pair-row.unplaced { opacity: .45; }
+.pair-row.unplaced .pair-slot { font-size: 12px; color: var(--muted); border-style: dashed; }
+
 .pair-row.over,
 .pair-pool.over {
   border-color: var(--accent); border-style: solid;
@@ -137,15 +142,21 @@
 
 .answered { color: var(--muted); font-size: 12px; margin: var(--sp-3) 0 0; }
 
+.my-answer { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.my-answer code { color: var(--text); }
+
 /* The line that explains a board a sudden death produced. It sits ABOVE the table on purpose:
    on an all-wrong round every row reads ❌ and the elimination list matches no column at all,
    so the explanation has to be read before the numbers, not after them. */
-/* the «somebody bought back» line — good news, so green where the tiebreak note is red */
+/* The «somebody bought back» line. It sits at the TOP of the board and is yellow, matching the
+   client's announcement: this is news about the roster, and it has to be read before the numbers
+   it explains — the alive counter going UP between rounds otherwise reads as a bug. */
 .buyback-note {
-  margin: 6px 0 10px; padding: 8px 12px; font-size: 13px; line-height: 1.5;
-  border: 1px solid var(--line); border-radius: 10px; background: rgba(80, 200, 120, .08);
+  margin: 0 0 12px; padding: 8px 12px; font-size: 13px; line-height: 1.5;
+  border: 1px solid var(--warn-line); border-radius: 10px;
+  background: var(--warn-soft); color: var(--warn);
 }
-.buyback-note b { color: var(--good, #5dc878); }
+.buyback-note b { color: var(--warn); }
 
 .tiebreak-note {
   background: var(--bad-soft); border: 1px solid var(--bad-line); color: var(--text);
@@ -180,6 +191,24 @@
   display: block; max-width: 100%; max-height: 320px;
   border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
 }
+.question-image { cursor: zoom-in; }
+
+/* The enlarged picture. It covers the viewport and closes on a tap anywhere — the round's
+   deadline keeps running underneath, so dismissing it must not be a hunt for a close button. */
+.question-zoom {
+  position: fixed; inset: 0; z-index: 60; cursor: zoom-out;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .88); padding: 24px;
+}
+.question-zoom img {
+  max-width: 100%; max-height: 100%; border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.question-zoom .zoom-hint {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; color: var(--muted);
+}
+
 .question-audio { display: block; width: 100%; max-width: 420px; margin-top: 8px; }
 .media-error {
   margin: 0; padding: 10px 12px; font-size: 13px; line-height: 1.5;

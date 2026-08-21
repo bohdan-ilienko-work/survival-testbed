@@ -47,7 +47,7 @@ export interface ActionDeps {
  * fight (question, results, buyback, the lobby countdown) stays on the stage, because a dialog
  * over a running round is a dialog over a ticking deadline.
  */
-export type Dialog = 'booking' | 'lobby' | 'quote' | 'character';
+export type Dialog = 'booking' | 'lobby' | 'quote' | 'character' | 'rules' | 'tickets';
 
 /**
  * What the player looks like right now, straight off beG.getContext's `userContext`

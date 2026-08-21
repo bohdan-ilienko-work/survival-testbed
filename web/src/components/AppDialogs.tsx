@@ -9,12 +9,15 @@
 // App.css — the order App.tsx used to pin. Sorting this list would re-sort the cascade with it.
 import { CharacterEditor } from '../ui/CharacterEditor';
 import { BookingDialog } from './BookingDialog';
+import { RulesDialog } from './RulesDialog';
+import { TicketShopDialog } from './TicketShopDialog';
 import { BuyBackQuoteDialog, LobbyStatusDialog } from './InspectorDialogs';
 import type { SurvivalState } from '../survival';
 import type { Booking } from '../hooks/useBooking';
 import type { Dialogs } from '../hooks/useDialogs';
 import type { MatchActions } from '../hooks/useMatchActions';
 import type { MyLook } from '../hooks/useMyLook';
+import type { Tickets } from '../hooks/useTickets';
 import type { ProfileEdits } from '../hooks/useProfileEdits';
 
 export interface AppDialogsProps {
@@ -30,6 +33,7 @@ export interface AppDialogsProps {
   alive: number;
   booking: Booking;
   match: MatchActions;
+  tickets: Tickets;
   edits: ProfileEdits;
   myLook: MyLook;
   /** the shared opener, so the booking dialog's «Персонаж» button refreshes like the toolbar's */
@@ -47,6 +51,7 @@ export function AppDialogs({
   alive,
   booking,
   match,
+  tickets,
   edits,
   myLook,
   onCharacter,
@@ -88,6 +93,20 @@ export function AppDialogs({
         info={match.quoteInfo}
         state={state}
         now={now}
+      />
+
+      <RulesDialog open={dialogs.dialog === 'rules'} onClose={dialogs.close} />
+
+      <TicketShopDialog
+        open={dialogs.dialog === 'tickets'}
+        onClose={dialogs.close}
+        busy={busy}
+        dialogError={dialogError}
+        packs={tickets.packs}
+        tickets={state.tickets}
+        gems={tickets.gems}
+        onRefresh={tickets.refreshTickets}
+        onBuy={tickets.buyTickets}
       />
 
       {/* The one dialog that WRITES. All three of its calls go through run(), so a refusal comes

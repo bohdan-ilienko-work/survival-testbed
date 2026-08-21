@@ -32,6 +32,10 @@ const REASON_TEXT: Record<string, string> = {
   ad_limit_reached: 'Ліміт рекламних тікетів вичерпано',
   // gate: BUYBACK_MIN_PLAYERS_REQUIRED — too few players left for a revive
   buyback_too_few_players: 'Залишилося замало гравців — викуп уже неможливий',
+  // ROUND-level, from roundResult.buybackUnavailableReason: the round opened no window at all,
+  // for anybody. Different from the per-player denials above — nobody was offered anything.
+  two_player_round: 'У фіналі на двох викупу немає',
+  too_few_players: 'Гравців у раунді замало, щоб відкривати вікно викупу',
   // gate: BUYBACK_MAX_USES — this player has spent every attempt
   buyback_attempts_exhausted: 'Ти вже використав усі спроби викупу',
 

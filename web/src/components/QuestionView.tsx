@@ -69,9 +69,15 @@ export function QuestionView({
 
   return (
     <div className="panel question">
+      {/* The badge also answers "did it hang?". Since the server stopped ending a round the
+          moment everyone had answered (the countdown has to reach zero for everybody, and it
+          waits a further grace period after that), an answered tester sits and watches a clock
+          they no longer interact with — so the badge says what is being waited for. */}
       {disabled && (
         <div className="badge">
-          {state.myAnswer !== undefined || sent ? 'відповідь надіслано' : 'глядач'}
+          {state.myAnswer !== undefined || sent
+            ? 'відповідь надіслано · чекаємо на таймер'
+            : 'глядач'}
         </div>
       )}
       <h2>{q.text ?? `Питання (${q.mode})`}</h2>
