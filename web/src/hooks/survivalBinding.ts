@@ -30,6 +30,13 @@ export interface SurvivalBinding {
 export function makeSurvivalBinding(
   deps: ActionDeps,
   fetchBooking: () => Promise<unknown>,
+  /**
+   * What to do while there is nothing to join: a match is running and the next lobby does not
+   * exist yet. The tab used to sit on a red line doing nothing for the length of somebody
+   * else's match — so this hands the wait to the watch screen, and the retry loop underneath
+   * keeps running and joins the moment a lobby opens.
+   */
+  waiting?: { onWait: () => void; onJoined: () => void },
 ): SurvivalBinding {
   const { gw, pushLog, setState } = deps;
 
@@ -47,15 +54,17 @@ export function makeSurvivalBinding(
     onBusy: (message, attempt) => {
       setState((s) => ({
         ...s,
-        lastError: 'Матч уже йде — чекаю, поки відкриється наступне лоббі…',
+        lastError: 'Матч уже йде — поки дивимось його; заведу тебе, щойно відкриється лоббі',
       }));
-      if (attempt === 0) pushLog(`лоббі зайняте (${message}) — чекаю наступного`);
+      if (attempt === 0) pushLog(`лоббі зайняте (${message}) — дивлюсь матч і чекаю наступного`);
+      waiting?.onWait();
     },
     // "No lobby is open for booking right now": already played / the next match is running —
     // the calm words, the same 3 s cadence, a label of its own so the log tells the arms apart
     onNoBooking: (message, attempt) => {
       setState((s) => ({ ...s, lastError: MATCH_IN_PROGRESS_TEXT }));
-      if (attempt === 0) pushLog(`реєстрацію закрито (${message}) — чекаю на наступне лобі`);
+      if (attempt === 0) pushLog(`реєстрацію закрито (${message}) — дивлюсь матч і чекаю наступного`);
+      waiting?.onWait();
     },
     onEnded: (message) => {
       resetScene();

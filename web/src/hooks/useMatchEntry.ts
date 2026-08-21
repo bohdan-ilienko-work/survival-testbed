@@ -32,10 +32,12 @@ export function useMatchEntry(
   setSession: Dispatch<any>,
   setSurvivalLost: (lost: boolean) => void,
   fetchBooking: () => Promise<unknown>,
+  /** see makeSurvivalBinding: what to do while somebody else's match is still running */
+  waiting?: { onWait: () => void; onJoined: () => void },
 ): MatchEntry {
   const { gw, run, setState } = deps;
   const { joinIO, gateIO, resetScene, bindSurvival, rejoinAndRetry, resetAndReenter } =
-    makeSurvivalBinding(deps, fetchBooking);
+    makeSurvivalBinding(deps, fetchBooking, waiting);
 
   const connectAll = () =>
     run('connect all servers', async () => {
@@ -74,6 +76,8 @@ export function useMatchEntry(
       }));
       await gw().connectTarget('survival');
       if (res?.token) await bindSurvival(res.token);
+      // we are IN a lobby now — the watch screen has done its job
+      waiting?.onJoined();
       setSurvivalLost(false);
       return { playerId: s?.playerId, lobbyId: res?.lobbyId };
     }).catch(() => undefined);
@@ -97,6 +101,8 @@ export function useMatchEntry(
       }));
       await gw().connectTarget('survival');
       if (res?.token) await bindSurvival(res.token);
+      // we are IN a lobby now — the watch screen has done its job
+      waiting?.onJoined();
       return res;
     }).catch(() => undefined);
 

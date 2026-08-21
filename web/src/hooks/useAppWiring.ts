@@ -4,7 +4,7 @@
 // below is new — the order of the calls and the two circular closures are exactly what they
 // were, and the comments on them say why they must stay that way.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { errorText, initialState, reduce } from '../survival';
 import type { LobbyPlayer, SurvivalState } from '../survival';
 import { useActionRunner } from './useActionRunner';
@@ -86,8 +86,37 @@ export function useAppWiring(): AppWiring {
   });
   const booking = useBooking(deps, session.setProfile);
   const tickets = useTickets(deps, state.step);
+  /**
+   * Waiting out somebody else's match: hand the wait to the watch screen instead of leaving the
+   * tab on a red line doing nothing, and drop it again the moment a lobby lets us in.
+   *
+   * Through a REF because the join loop is built before the spectator hook is — the same reason
+   * the socket handlers above are closures rather than values. Both callbacks read the ref when
+   * the loop actually calls them, by which time it is filled.
+   */
+  const spectatorRef = useRef<Spectator | null>(null);
+  const waiting = useMemo(
+    () => ({
+      onWait: () => {
+        const sp = spectatorRef.current;
+        if (sp && !sp.watching) void sp.watch();
+      },
+      onJoined: () => {
+        const sp = spectatorRef.current;
+        if (sp?.watching) void sp.stopWatching();
+      },
+    }),
+    [],
+  );
+
   // booking.fetchBooking doubles as the C4 pre-join gate's status read (see joinPolicy)
-  const entry = useMatchEntry(deps, session.setSession, conn.setSurvivalLost, booking.fetchBooking);
+  const entry = useMatchEntry(
+    deps,
+    session.setSession,
+    conn.setSurvivalLost,
+    booking.fetchBooking,
+    waiting,
+  );
   const match = useMatchActions(deps, {
     state,
     survivalStatus: conn.status.survival,
@@ -97,6 +126,9 @@ export function useAppWiring(): AppWiring {
     resetAndReenter: entry.resetAndReenter,
   });
   const spectator = useSpectator(deps);
+  useEffect(() => {
+    spectatorRef.current = spectator;
+  }, [spectator]);
   const edits = useProfileEdits(deps, {
     playerId: session.playerId,
     setProfile: session.setProfile,
