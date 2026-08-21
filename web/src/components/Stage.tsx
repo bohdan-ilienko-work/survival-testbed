@@ -10,6 +10,7 @@ import { BuyBackPanel } from './BuyBackPanel';
 import { ClientStateTable } from './ClientStateTable';
 import { FinishView } from './FinishView';
 import { humansBotsLabel } from './peopleWords';
+import { untilText } from './timeWords';
 import { QuestionView } from './QuestionView';
 import { ResultsView } from './ResultsView';
 import { TiebreakBadge } from './TiebreakBadge';
@@ -97,7 +98,13 @@ export function Stage({
             </>
           ) : (
             state.scheduledStartAt && (
-              <p>старт: {new Date(state.scheduledStartAt).toLocaleString()}</p>
+              <>
+                <p>старт: {new Date(state.scheduledStartAt).toLocaleString()}</p>
+                {/* The wait is REAL now that the stand runs on the schedule instead of starting
+                    the moment somebody joins: a bare timestamp left the tester staring at a
+                    still line with no idea whether it is two minutes away or forty. */}
+                <p className="until">{untilText(Date.parse(state.scheduledStartAt) - now)}</p>
+              </>
             )
           )}
           {/* C2: bots are seeded from lobby open, so the bare length says nothing — split it */}
