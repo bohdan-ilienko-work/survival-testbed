@@ -5,7 +5,7 @@
 // rounds happen in — and because none of them is addressed to a single player, so this is the
 // only reducer file that never needs to know who "I" am.
 
-import { asNum, asPlayers, asRewardTable, asRewards } from './guards';
+import { asNum, asPlayers, asRewardTable, asRewards, asTag } from './guards';
 import { NO_MATCH } from './match';
 import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
@@ -37,6 +37,20 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         lobbyId: p.lobbyId ?? state.lobbyId,
         lobbyState: p.state ?? state.lobbyState,
         players: asPlayers(p.roster, state.players),
+        // The lobby's CURRENT start, re-read on every roster: it can move while we are
+        // connected (a set was locked, a set changed, a start was missed), and this reply is
+        // the second way that reaches us — see 'lobbyRescheduled' below for the first.
+        scheduledStartAt: asTag(p.scheduledStartAt) ?? state.scheduledStartAt,
+      };
+
+    // The start moved. Cached once from the connect reply, it would otherwise stay at the old
+    // instant for the life of the tab: the countdown hits zero and sits there while the server
+    // correctly waits for the new one.
+    case 'lobbyRescheduled':
+      return {
+        ...state,
+        lobbyId: p.lobbyId ?? state.lobbyId,
+        scheduledStartAt: asTag(p.scheduledStartAt) ?? state.scheduledStartAt,
       };
 
     case 'onboardingStarted': {
