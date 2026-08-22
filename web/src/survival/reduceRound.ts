@@ -8,6 +8,7 @@
 import { asIds, asMiss, asNum, asScores, asTag, asYears } from './guards';
 import type { SurvivalState } from './state';
 import { mergeRoundResultTiebreak, readTiebreak } from './tiebreak';
+import { resumeFromReconnect } from './reconnect';
 import { NO_OFFER } from './wallet';
 import type { RoundMode } from './wire';
 
@@ -53,6 +54,11 @@ export function reduceRound(
         // an ORDINARY round: a marker left standing would label it a sudden death
         tiebreak: undefined,
       };
+
+    // Sent only to the player who just came back, and the only thing they get: connect itself
+    // answers with the lobby, never with the fight. See reconnect.ts.
+    case 'playerReconnected':
+      return resumeFromReconnect(state, p);
 
     case 'answerReceived':
       return { ...state, answeredCount: state.answeredCount + 1 };

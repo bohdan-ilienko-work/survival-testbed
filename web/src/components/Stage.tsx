@@ -44,6 +44,10 @@ export function Stage({
   onBuyBack,
   onQuote,
 }: StageProps) {
+  // The event says it when this tab was here for fightStarted; the snapshot/playerReconnected
+  // says it as `nextRoundAt` when it was not. Same instant either way.
+  const firstQuestionAt = state.firstRoundAt ?? state.nextRoundAt;
+
   const secondsLeft = useMemo(() => {
     if (!state.deadline) return null;
     // The deadline times ANSWERS. roundResult clears it, but a tiebreak's instant can still be
@@ -127,14 +131,14 @@ export function Stage({
           {/* The server now says how long it waits before round 1 (fightStarted.fightStartDelayMs)
               instead of leaving every client to hold its own copy of the number. Absent = an
               older server, and then there is no countdown rather than a guessed one. */}
-          {state.firstRoundAt === undefined ? (
+          {firstQuestionAt === undefined ? (
             <p className="hint">
               Сервер не назвав, скільки чекатиме до першого питання
               (<code>fightStartDelayMs</code>) — відліку не буде.
             </p>
           ) : (
             <p className="until">
-              перше питання {untilText(state.firstRoundAt - now)}
+              перше питання {untilText(firstQuestionAt - now)}
             </p>
           )}
         </div>
