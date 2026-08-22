@@ -122,7 +122,22 @@ export function Stage({
       )}
 
       {state.step === 'starting' && (
-        <div className="panel"><h2>Матч стартує…</h2></div>
+        <div className="panel">
+          <h2>Матч стартує…</h2>
+          {/* The server now says how long it waits before round 1 (fightStarted.fightStartDelayMs)
+              instead of leaving every client to hold its own copy of the number. Absent = an
+              older server, and then there is no countdown rather than a guessed one. */}
+          {state.firstRoundAt === undefined ? (
+            <p className="hint">
+              Сервер не назвав, скільки чекатиме до першого питання
+              (<code>fightStartDelayMs</code>) — відліку не буде.
+            </p>
+          ) : (
+            <p className="until">
+              перше питання {untilText(state.firstRoundAt - now)}
+            </p>
+          )}
+        </div>
       )}
 
       {(state.step === 'question' || state.step === 'spectator') &&

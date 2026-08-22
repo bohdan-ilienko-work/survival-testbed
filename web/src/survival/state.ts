@@ -31,6 +31,14 @@ export interface SurvivalState {
   lobbyState?: string;
   scheduledStartAt?: string;
   /**
+   * Absolute instant of the FIRST question, computed from `fightStarted.fightStartDelayMs`.
+   *
+   * The server ships the delay (its own SURVIVAL_FIGHT_START_DELAY_MS) rather than an instant,
+   * so the arrival time is turned into one here — that is what every other countdown on this
+   * screen counts to, and it keeps a client's own clock out of it after the first tick.
+   */
+  firstRoundAt?: number;
+  /**
    * ABSOLUTE unix ms when on-boarding closes and the fight starts — the server's own deadline,
    * never a locally computed `Date.now() + durationMs`. Two reasons it has to be absolute: a
    * duration is measured from the moment the event is HANDLED, so a tab that got the broadcast

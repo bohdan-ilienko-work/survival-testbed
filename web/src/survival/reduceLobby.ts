@@ -11,6 +11,15 @@ import type { SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
 
 /** Answers `undefined` for any event this family does not own, so the dispatcher can move on. */
+/**
+ * A delay on the wire turned into the instant it names. `Date.now()` on purpose: this is the
+ * one countdown the server states as a duration, so the clock starts when the event lands.
+ */
+function startsIn(delayMs: unknown): number | undefined {
+  const ms = asNum(delayMs);
+  return ms === undefined ? undefined : Date.now() + ms;
+}
+
 export function reduceLobby(state: SurvivalState, name: string, p: any): SurvivalState | undefined {
   switch (name) {
     case 'playerJoined':
@@ -58,6 +67,9 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         lobbyState: 'ACTIVE',
         onboardingEndsAt: undefined,
         players: asPlayers(p.roster ?? p.players, state.players),
+        // How long until the first question. Absent on an older server — then there is simply
+        // no countdown, which is honest; guessing the number is what the clients used to do.
+        firstRoundAt: startsIn(p.fightStartDelayMs),
       };
 
     case 'playerKickedAfterDisconnect':
