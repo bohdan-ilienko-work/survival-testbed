@@ -32,6 +32,8 @@ export default function App() {
         tickets={state.tickets}
         ticketsReason={state.ticketsReason}
         ticketsDelta={state.ticketsDelta}
+        nextMatchAt={w.nextMatchAt}
+        now={now}
       />
 
       <Toolbar

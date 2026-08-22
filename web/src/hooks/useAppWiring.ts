@@ -47,6 +47,8 @@ export interface AppWiring {
   openCharacterEditor: () => void;
   openRules: () => void;
   openTicketShop: () => void;
+  /** ISO start of the next match, whichever source knows it — see the header's NextMatch */
+  nextMatchAt?: string;
 }
 
 export function useAppWiring(): AppWiring {
@@ -86,7 +88,7 @@ export function useAppWiring(): AppWiring {
     booking.forget();
     match.forgetSnapshots();
   });
-  const booking = useBooking(deps, session.setProfile);
+  const booking = useBooking(deps, session.setProfile, session.playerId);
   const tickets = useTickets(deps, state.step);
   /**
    * Waiting out somebody else's match: hand the wait to the watch screen instead of leaving the
@@ -146,6 +148,10 @@ export function useAppWiring(): AppWiring {
   const alive = players.filter((p) => !p.eliminated).length;
   const myLook = useMyLook(session.playerId, session.profile, booking.status, state.players);
 
+  // The live lobby knows it once this tab has joined; before that — and for a tab that never
+  // joins — beG.getSurvivalStatus is the only source, which is why it is polled below.
+  const nextMatchAt = state.scheduledStartAt ?? booking.status?.lobby?.scheduledStartAt;
+
   const openBooking = () => dialogs.open('booking', booking.refresh);
   const openLobbyStatus = () => dialogs.open('lobby', match.lobbyStatus);
   const openQuote = () => dialogs.open('quote', match.quoteBuyBack);
@@ -181,5 +187,6 @@ export function useAppWiring(): AppWiring {
     openCharacterEditor,
     openRules,
     openTicketShop,
+    nextMatchAt,
   };
 }

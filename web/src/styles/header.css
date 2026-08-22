@@ -28,6 +28,20 @@ header h1 {
   flex: 0 1 auto; min-width: 0;
 }
 
+/* When the next match starts. A header fact, not a per-tab one: it is true before anything is
+   connected, and it is the first thing somebody opening this page wants to know. */
+.nextmatch {
+  padding: 3px 10px; border-radius: var(--r-pill); font-size: 12px; line-height: 1.5;
+  background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+  white-space: nowrap;
+}
+.nextmatch b { color: var(--text); font-variant-numeric: tabular-nums; }
+.nextmatch .until, .nextmatch .day { color: var(--muted); }
+/* Under a minute — the same threshold the round timers use to mean «зараз». */
+.nextmatch.hot { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+.nextmatch.hot b { color: var(--warn); }
+.nextmatch.none { opacity: .6; }
+
 .pills { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
 .pill {
   padding: 3px 10px; border-radius: var(--r-pill); font-size: 12px; line-height: 1.5;

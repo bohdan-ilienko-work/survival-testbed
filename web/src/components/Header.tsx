@@ -6,6 +6,7 @@
 import type { Target, TargetState } from '../gateway';
 import { TARGETS } from '../hooks/useGateway';
 import type { Profile } from '../hooks/types';
+import { NextMatch } from './NextMatch';
 import { CharacterImg, FlagImg } from './PlayerArt';
 
 export interface HeaderProps {
@@ -17,6 +18,10 @@ export interface HeaderProps {
   tickets?: number;
   ticketsReason?: string;
   ticketsDelta?: number;
+  /** ISO instant of the next match, from the live lobby or from beG.getSurvivalStatus */
+  nextMatchAt?: string;
+  /** the shared clock, so the countdown ticks with everything else on the page */
+  now: number;
 }
 
 export function Header({
@@ -27,6 +32,8 @@ export function Header({
   tickets,
   ticketsReason,
   ticketsDelta,
+  nextMatchAt,
+  now,
 }: HeaderProps) {
   // The chip itself only shows a number; the tooltip says where that number came from,
   // which is the difference between "live" and "stale" while testing.
@@ -51,6 +58,11 @@ export function Header({
           </span>
         ))}
       </div>
+      {/* Between the connection pills and the account: it is a fact about the STAND, not about
+          this tab, and it is the one thing on this page that is worth knowing before anything
+          is connected at all. */}
+      <NextMatch startAt={nextMatchAt} now={now} />
+
       <div className="who">
         {session?.playerId ? (
           <>

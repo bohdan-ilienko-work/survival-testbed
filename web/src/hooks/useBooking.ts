@@ -5,7 +5,7 @@
 // survival session anywhere: that is the whole point of the panel, so nothing here may ever
 // reach for `status.survival`.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { applyTicketBalance, readBookingStatus, type BookingStatus } from '../survival';
 import type { ActionDeps, Profile } from './types';
@@ -41,9 +41,18 @@ export interface Booking {
   forget: () => void;
 }
 
+/** How often the header's «старт матчу» is re-read while nobody has the dialog open. */
+const POLL_MS = 30_000;
+
+/**
+ * @param playerId polling only makes sense once there is a player: beG guards every method with
+ * `if (connection.player)` and simply never calls back otherwise, which is a 15 s timeout per
+ * tick instead of an answer.
+ */
 export function useBooking(
   deps: ActionDeps,
   setProfile: Dispatch<SetStateAction<Profile | null>>,
+  playerId?: string,
 ): Booking {
   const { gw, runInDialog, setState } = deps;
   // Kept OUT of SurvivalState: this is a polled snapshot of main-server's booking screen, not
@@ -77,6 +86,28 @@ export function useBooking(
 
   // Lives in the booking dialog now (its refresh button), so its failure has to show up there.
   const refresh = () => runInDialog('beG.getSurvivalStatus', fetchBooking);
+
+  /**
+   * Keeps the header's start time honest without anybody opening anything.
+   *
+   * Quietly: a poll that misses is not an error to shout about — the previous answer stays on
+   * screen and the next tick tries again. It is also the reason the schedule appears at all for
+   * a tab that never joins a lobby, which is exactly the tab asking when the match starts.
+   */
+  useEffect(() => {
+    if (!playerId) return;
+    let alive = true;
+    const tick = () => {
+      if (!alive) return;
+      void fetchBooking().catch(() => undefined);
+    };
+    tick();
+    const timer = setInterval(tick, POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [playerId, fetchBooking]);
 
   /**
    * Testbed convenience, not a product feature: fresh mock accounts are clanless, so without
