@@ -23,6 +23,8 @@ export interface Tickets {
   packs: TicketPack[];
   gems?: number;
   buyTickets: (packId: number) => Promise<unknown>;
+  /** beG.claimSurvivalAdTicket — one ticket for one rewarded ad, once per UTC day */
+  claimAdTicket: () => Promise<unknown>;
 }
 
 /** @param step the client's own step — the payout re-read below is armed by it and nothing else */
@@ -99,5 +101,22 @@ export function useTickets(deps: ActionDeps, step: Step): Tickets {
     // the payout read further into the future while events keep arriving.
   }, [step, gw, pushLog, setState]);
 
-  return { grantTickets, refreshTickets, packs, gems, buyTickets };
+  /**
+   * The out-of-match ad offer. Not the same thing as the «Реклама» button, which is the
+   * in-match survival.recordAdView capped per match — this one is main-server's, capped once a
+   * UTC day, and is what a player with no tickets reaches for before a tournament.
+   */
+  const claimAdTicket = () =>
+    run('beG.claimSurvivalAdTicket', async () => {
+      const res: any = await gw().call('main', 'beG', 'claimSurvivalAdTicket', []);
+      setState((s) => applyTicketBalance(s, res?.tickets, { reason: 'daily_ad' }));
+      pushLog(
+        res?.granted
+          ? `реклама → +${res.granted} 🎟 (наступна ${String(res.nextAdTicketAt).slice(11, 16)} UTC)`
+          : `сьогодні вже брав: ${res?.reason ?? '—'}`,
+      );
+      return res;
+    }).catch(() => undefined);
+
+  return { grantTickets, refreshTickets, packs, gems, buyTickets, claimAdTicket };
 }

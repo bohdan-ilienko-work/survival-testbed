@@ -26,7 +26,11 @@ export interface ToolbarProps {
   onJoin: () => void;
   onLobbyStatus: () => void;
   onLeave: () => void;
+  /** main-server's own leave: gives the seat back without a survival session */
+  onUnregister: () => void;
   onAd: () => void;
+  /** one ticket for one ad, once a UTC day (main-server) */
+  onAdTicket: () => void;
   onQuote: () => void;
   /** the mode's rules, in words — the same copy the client shows behind its Rules button */
   onRules: () => void;
@@ -61,6 +65,7 @@ export function Toolbar(p: ToolbarProps) {
         <button onClick={p.onGrantTickets} disabled={!!busy || !playerId}>+50 🎟</button>
         <button onClick={p.onRefreshTickets} disabled={!!busy || !playerId}>Тікети</button>
         <button onClick={p.onBuyTickets} disabled={!!busy || !playerId}>Купити 🎟</button>
+        <button onClick={p.onAdTicket} disabled={!!busy || !playerId}>Реклама → 🎟</button>
       </ToolGroup>
 
       <ToolGroup label="Survival">
@@ -77,6 +82,11 @@ export function Toolbar(p: ToolbarProps) {
             has signed in or connected anything. */}
         <button onClick={p.onRules}>Правила</button>
         <button onClick={p.onLeave} disabled={!!busy || step === 'idle'}>Вийти</button>
+        {/* Gated on the PLAYER, not on the step: the whole point is that it works before this
+            tab has any survival session — which is where the seat used to survive. */}
+        <button onClick={p.onUnregister} disabled={!!busy || !playerId}>
+          Знятися з турніру
+        </button>
       </ToolGroup>
 
       <ToolGroup label="Глядач">

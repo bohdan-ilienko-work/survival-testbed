@@ -51,7 +51,9 @@ export default function App() {
         onJoin={entry.joinSurvival}
         onLobbyStatus={w.openLobbyStatus}
         onLeave={entry.leaveSurvival}
+        onUnregister={w.booking.unregister}
         onAd={match.recordAdView}
+        onAdTicket={w.tickets.claimAdTicket}
         onQuote={w.openQuote}
         onRules={w.openRules}
         onBuyTickets={w.openTicketShop}

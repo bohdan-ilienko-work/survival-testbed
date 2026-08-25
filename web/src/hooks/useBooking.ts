@@ -32,6 +32,8 @@ const flagsToTry = (): string[] => {
 
 export interface Booking {
   status: BookingStatus | null;
+  /** beG.leaveSurvival — the menu-level "take my seat back", with no survival session */
+  unregister: () => Promise<unknown>;
   /** re-read it without a run() around it — for callers already inside one */
   fetchBooking: () => Promise<any>;
   /** the dialog's own refresh button */
@@ -110,6 +112,23 @@ export function useBooking(
   }, [playerId, fetchBooking]);
 
   /**
+   * Un-registering from the MENU — a different thing from the «Вийти» button, which speaks to
+   * survival-server over a live session. This one goes to main-server, which is how a real
+   * client leaves a tournament it has not connected to yet, and is exactly the path that used
+   * to forget the paid entry while leaving the seat standing on survival-server.
+   *
+   * The booking status is re-read straight after, because the whole point is watching the
+   * roster lose the row and `registered` flip to false.
+   */
+  const unregister = () =>
+    runInDialog('beG.leaveSurvival', async () => {
+      const res: any = await gw().call('main', 'beG', 'leaveSurvival', []);
+      setState((s) => applyTicketBalance(s, res?.tickets, { reason: 'leave' }));
+      await fetchBooking();
+      return res;
+    });
+
+  /**
    * Testbed convenience, not a product feature: fresh mock accounts are clanless, so without
    * this the roster's clan column is empty on every row and the new field goes untested.
    * The clan NAME is copied into the roster row when RegisterPlayer runs and is never
@@ -163,5 +182,5 @@ export function useBooking(
    */
   const forget = () => setStatus(null);
 
-  return { status, fetchBooking, refresh, mockClan, changeFlag, forget };
+  return { status, fetchBooking, refresh, unregister, mockClan, changeFlag, forget };
 }
