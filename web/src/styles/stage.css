@@ -17,7 +17,10 @@
    horizontal scrollbar instead of scrolling inside its own box. */
 main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  /* The aside grows with the window instead of staying at a fixed 380: it holds the event
+     feed and the log, which are lines of JSON, and every pixel it gains is a truncation it
+     no longer has to make. Capped so it never out-sizes the match itself. */
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 26vw, 460px);
   gap: var(--sp-4);
   align-items: start;
 }

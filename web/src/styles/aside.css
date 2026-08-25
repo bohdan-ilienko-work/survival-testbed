@@ -11,7 +11,25 @@
 
 /* ─── aside ─────────────────────────────────────────────────────────────────────── */
 
-aside { display: grid; gap: var(--sp-2); align-content: start; min-width: 0; }
+/* Sticky, and only where there is room to be: the roster and the log are what a tester watches
+   WHILE the match column scrolls under a long results table. `align-content: start` already
+   keeps the wells from stretching; this keeps them on screen. */
+aside {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  min-width: 0;
+}
+
+@media (min-width: 1081px) and (min-height: 700px) {
+  aside {
+    position: sticky;
+    top: var(--sp-3);
+    /* never taller than the window, or the bottom well would be unreachable */
+    max-height: calc(100vh - var(--sp-4) * 2);
+    overflow: auto;
+  }
+}
 /* The rule after the caption is what separates three stacked lists at a glance — they are
    otherwise three identical dark boxes with a grey word on top. */
 aside h3 {

@@ -13,7 +13,9 @@
 /* The testbed is opened in several tabs side by side, so the padding has to give way before
    the content does — a fixed 16px gutter is 10% of a 320px-wide window. */
 .app {
-  max-width: 1400px;
+  /* Wide enough for the match column and the aside to both be readable on a laptop-and-a-half.
+     It was 1400, which put the aside's log at 380px while the stage sat half empty. */
+  max-width: 1560px;
   margin: 0 auto;
   padding: clamp(10px, 1.4vw, 20px);
 }

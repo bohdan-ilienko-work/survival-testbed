@@ -23,12 +23,17 @@
    All three work because a group is a WRAPPING flex row whose caption claims a full line of
    its own (flex-basis:100%): whatever follows the caption flows onto the line below it,
    wrapper or no wrapper. */
+/* A GRID of equal tiles rather than a wrapping flex row.
+   Flex sized each group by its widest button, so five groups of two-to-six buttons landed as
+   three ragged rows with a hole the width of half the page next to the last one. auto-fit
+   tiles fill every row instead: five groups sit in one row on a wide window and fold to two,
+   then one, as it narrows — and `stretch` keeps their captions on a single baseline. */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  /* stretch, so groups of different button counts end up the same height and their captions
-     sit on one line across the row */
-  align-items: stretch;
+  /* start, not stretch: stretched groups all take the height of the tallest, which left «Стенд»
+     and «Глядач» as two buttons above a hundred pixels of empty well. */
+  align-items: flex-start;
   gap: var(--sp-2);
   padding: var(--sp-3) 0 var(--sp-4);
 }
@@ -41,8 +46,11 @@
   align-items: center;
   align-content: flex-start;
   gap: var(--sp-2);
-  /* a flex item defaults to min-width:auto, i.e. "as wide as my widest button"; without this a
-     group of long labels refuses to wrap and pushes the page into horizontal scroll */
+  /* Grow to fill the row, starting from the width the buttons actually need: a group of six
+     long labels gets the room for them, a group of two does not — and no row ends with a hole
+     the width of half the page, which is what a plain wrapping row left behind.
+     min-width:0 is what lets a long label wrap instead of pushing the page sideways. */
+  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
   padding: 7px 10px 9px;
@@ -88,3 +96,12 @@
 .toolbar > button,
 .toolbar > .busy,
 .toolbar > .tickets { align-self: center; }
+
+/* A label longer than its tile wraps instead of widening the column. The buttons are the row
+   the tester scans, so a two-line label costs nothing; a sideways-scrolling page costs the
+   whole layout. */
+.toolbar button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}

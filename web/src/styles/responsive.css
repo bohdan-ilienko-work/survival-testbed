@@ -24,10 +24,11 @@
   .who { margin-left: 0; width: 100%; }
   .booking .meta { margin-left: 0; }
   /* one group per line: side by side they would each be one button wide and the captions
-     would carry more width than the controls */
+     would carry more width than the controls. The toolbar is a GRID now, so this is a track
+     count, not a flex basis. */
   .toolbar .tgroup,
   .toolbar > section,
-  .toolbar > fieldset { flex: 1 1 100%; }
+  .toolbar > fieldset { flex-basis: 100%; }
   .panel { padding: var(--sp-4); }
   .rosterbox .rhead, .roster li { grid-template-columns: 24px 22px 24px minmax(0, 1fr) auto; gap: var(--sp-1); }
   .roster .clan, .players .clan { max-width: 84px; }
