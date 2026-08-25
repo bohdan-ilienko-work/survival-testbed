@@ -5,7 +5,7 @@
 // helpers in behind it. Split out of booking.ts when the events-per-day fields pushed that file
 // over the 200-line budget.
 
-import type { LobbyPlayer } from './wire';
+import type { LobbyPlayer, RankReward } from './wire';
 
 /**
  * The lobby object main-server passes straight through from survival-server's GetActiveLobby.
@@ -34,6 +34,12 @@ export interface BookingLobby {
    * roster is carried through as it arrived — never sorted, filtered or de-duplicated.
    */
   roster: LobbyPlayer[];
+  /**
+   * What this lobby would pay for the field it holds RIGHT NOW — row i is place i+1, places
+   * past the last row are unpaid. It moves as people join: the prize pool is a function of the
+   * field size, so a tournament screen cannot state it from a table of its own.
+   */
+  rewardTable?: RankReward[];
 }
 
 /** A beG.getSurvivalStatus reply, guarded. */

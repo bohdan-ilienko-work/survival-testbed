@@ -3,6 +3,7 @@
 
 import { MATCH_IN_PROGRESS_TEXT, type BookingStatus } from '../survival';
 import { BookingRoster } from './BookingRoster';
+import { RewardPreview } from './RewardPreview';
 import { humansBotsLabel } from './peopleWords';
 // «через 3 год 12 хв» — shared with the watch screen, which answers the same question for a
 // viewer who never registered; see timeWords for why it is not spelled twice.
@@ -112,6 +113,10 @@ export function BookingBody({
           {Number.isFinite(startsAt) && <p className="until">{untilText(startsAt - now)}</p>}
 
           <BookingRoster roster={roster} me={me} />
+
+          {/* The prize pool of THIS lobby, as it stands. It moves with the roster above it,
+              which is the whole point of showing them together. */}
+          <RewardPreview rows={lobby.rewardTable} players={total} />
 
           {lobby.activePlayerCount !== undefined && lobby.activePlayerCount !== total && (
             <p className="answered">

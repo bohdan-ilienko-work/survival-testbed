@@ -5,7 +5,7 @@
 // is shown hours before the match, when there is no survival session to listen on, and the
 // connect reply is the one message a freshly bound socket gets about broadcasts it missed.
 
-import { asBool, asLastResult, asNum, asPlayers, asTag } from './guards';
+import { asBool, asLastResult, asNum, asPlayers, asTag, asRewardTable } from './guards';
 import type { BookingLobby, BookingStatus } from './bookingTypes';
 import { initialState, type SurvivalState } from './state';
 import { NO_OFFER } from './wallet';
@@ -37,6 +37,9 @@ export function readBookingStatus(reply: unknown): BookingStatus {
           round: asNum(raw.round),
           // no lobby means no roster, and an empty roster is not the same as "not an array"
           roster: asPlayers(raw.roster, []),
+          // What the lobby would pay for the field it holds now. Absent on an older
+          // survival-server, and then the screen simply says nothing rather than guessing.
+          rewardTable: asRewardTable(raw.rewardTable),
         }
       : null;
 
