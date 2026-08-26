@@ -36,8 +36,12 @@ const REASON_TEXT: Record<string, string> = {
   // for anybody. Different from the per-player denials above — nobody was offered anything.
   two_player_round: 'У фіналі на двох викупу немає',
   too_few_players: 'Гравців у раунді замало, щоб відкривати вікно викупу',
-  // gate: BUYBACK_MAX_USES — this player has spent every attempt
+  // gate: BUYBACK_MAX_USES — an absolute cap per match. Off by default now, so this one is
+  // only ever seen when an operator pins one.
   buyback_attempts_exhausted: 'Ти вже використав усі спроби викупу',
+  // gate: BUYBACK_MAX_STREAK — the live rule. Викупів за матч скільки завгодно, але не поспіль:
+  // програний раунд додає до серії, пережитий — обнуляє її.
+  buyback_streak_exhausted: 'Забагато викупів поспіль — цей раунд треба пережити самому',
 
   // ─── survival.spectate ────────────────────────────────────────────────────
   // Watching costs nothing and needs no account, so the only refusals it has are about the
@@ -52,6 +56,7 @@ const REASON_TEXT: Record<string, string> = {
 
 const TOO_FEW_PLAYERS = REASON_TEXT.buyback_too_few_players;
 const ATTEMPTS_EXHAUSTED = REASON_TEXT.buyback_attempts_exhausted;
+const STREAK_EXHAUSTED = REASON_TEXT.buyback_streak_exhausted;
 
 /**
  * The two gate tags above are new on the server and their exact spelling lives there,
@@ -63,6 +68,9 @@ const lookupReason = (tag: string): string | undefined => {
   const exact = REASON_TEXT[t];
   if (exact) return exact;
   if (/player/.test(t) && /few|min|enough|remain/.test(t)) return TOO_FEW_PLAYERS;
+  // before the generic one below: a streak tag also says "exhausted", and the run limit and
+  // the match cap are different refusals to a player deciding what to do next.
+  if (/streak|in_a_row|consecutive/.test(t)) return STREAK_EXHAUSTED;
   if (/exhaust|max_uses|no_attempts|out_of_attempts|attempts_left|attempt_limit/.test(t)) {
     return ATTEMPTS_EXHAUSTED;
   }
@@ -136,5 +144,5 @@ export const isHardDenial = (tag?: string): boolean => {
   if (HARD_DENIALS.has(t)) return true;
   // the two gate causes are permanent for this window whatever they end up called
   const text = lookupReason(t);
-  return text === TOO_FEW_PLAYERS || text === ATTEMPTS_EXHAUSTED;
+  return text === TOO_FEW_PLAYERS || text === ATTEMPTS_EXHAUSTED || text === STREAK_EXHAUSTED;
 };

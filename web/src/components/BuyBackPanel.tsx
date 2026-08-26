@@ -34,12 +34,15 @@ export function BuyBackPanel({
       ? null
       : Math.max(0, Math.ceil((state.buybackClosesAt - now) / 1000));
 
+  // The counter is a RUN, not a budget: the server bounds consecutive revives, not how many a
+  // match may hold, and surviving one round puts it back to zero. Saying «з N» alone would read
+  // as a match budget, so the label spells out that it counts losses in a row.
   const attemptLabel =
     state.buybackAttempt === undefined
       ? null
       : state.buybackMaxUses === undefined
-        ? `спроба ${state.buybackAttempt}`
-        : `спроба ${state.buybackAttempt} з ${state.buybackMaxUses}`;
+        ? `викуп ${state.buybackAttempt} поспіль`
+        : `викуп ${state.buybackAttempt} поспіль з ${state.buybackMaxUses}`;
 
   return (
     <div className="panel buyback">
@@ -78,8 +81,11 @@ export function BuyBackPanel({
         <p className="hint">Ціну ще не отримано від сервера…</p>
       ) : (
         state.buybackMaxUses !== undefined &&
-        state.buybackMaxUses > 1 && (
-          <p className="hint">Кожна наступна спроба викупу дорожча за попередню.</p>
+        state.buybackMaxUses > 0 && (
+          <p className="hint">
+            Викупів за матч не обмежено, але не більше {state.buybackMaxUses} поспіль — переживи
+            раунд, і лічильник обнулиться.
+          </p>
         )
       )}
     </div>

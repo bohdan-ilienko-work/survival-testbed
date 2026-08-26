@@ -133,7 +133,7 @@ export function BuyBackQuoteDialog({
             <span>{state.buybackCost === undefined ? '—' : `🎟 ${state.buybackCost}`}</span>
           </div>
           <div className="ui-row">
-            <span>спроба</span>
+            <span>викуп поспіль</span>
             <span>
               {state.buybackAttempt ?? '—'} / {state.buybackMaxUses ?? '—'}
             </span>
