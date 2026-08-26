@@ -40,7 +40,7 @@ export function ClientStateTable({
           <tr>
             <td>викуп (приватна ціна)</td>
             <td>
-              ціна {state.buybackCost ?? '—'} · спроба {state.buybackAttempt ?? '—'}/
+              ціна {state.buybackCost ?? '—'} · поспіль {state.buybackAttempt ?? '—'}/
               {state.buybackMaxUses ?? '—'} · по кишені:{' '}
               {state.buybackAffordable === undefined
                 ? '?'
