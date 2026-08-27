@@ -26,6 +26,16 @@ export function ClientStateTable({
           <tr><td>раунд / режим</td><td>{state.round} · {state.mode ?? '—'}</td></tr>
           <tr><td>питання</td><td>{state.question ? 'є' : 'немає'}</td></tr>
           <tr><td>моя відповідь</td><td>{state.myAnswer === undefined ? '—' : JSON.stringify(state.myAnswer)}</td></tr>
+          <tr>
+            <td>відповіді інших</td>
+            <td>
+              {state.liveAnswers.length === 0
+                ? state.myAnswer === undefined
+                  ? '— (поки не відповів — і не має приходити)'
+                  : '— (ще ніхто не відповів)'
+                : state.liveAnswers.map((a) => a.name || a.playerId).join(', ')}
+            </td>
+          </tr>
           <tr><td>вибув</td><td>{state.iAmEliminated ? 'так' : 'ні'}</td></tr>
           <tr>
             <td>тікети</td>

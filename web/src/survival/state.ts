@@ -5,6 +5,7 @@
 // a guard, the wallet helpers) never has to pull the event handling in behind it.
 
 import type {
+  LiveAnswer,
   LobbyPlayer,
   Question,
   RankReward,
@@ -63,6 +64,13 @@ export interface SurvivalState {
   nextRoundAt?: number;
   myAnswer?: unknown;
   answeredCount: number;
+  /**
+   * What the OTHERS answered this round, as they land. Fills only once this client's own answer
+   * is in — the server addresses the event to players who have already answered and to nobody
+   * else — and is emptied by `roundStarted`, like every other per-round field: a board left
+   * standing would show the previous question's answers under a new one.
+   */
+  liveAnswers: LiveAnswer[];
   scores: Score[];
   correctAnswer?: unknown;
   /**
@@ -142,6 +150,7 @@ export const initialState: SurvivalState = {
   players: [],
   round: 0,
   answeredCount: 0,
+  liveAnswers: [],
   scores: [],
   eliminated: [],
   iAmEliminated: false,

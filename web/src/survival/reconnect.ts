@@ -8,6 +8,7 @@
 // the whole of what a returning player knows about the match they are standing in.
 
 import { asNum, asYears } from './guards';
+import { mergeLiveAnswers } from './liveAnswers';
 import type { SurvivalState } from './state';
 
 /**
@@ -34,6 +35,10 @@ export function resumeFromReconnect(state: SurvivalState, p: any): SurvivalState
       // `answered: true` means this client's answer is already in — null keeps the panel quiet
       // without inventing a value it never sent.
       myAnswer: p.answered ? state.myAnswer ?? null : state.myAnswer,
+      // The board of who answered what, rebuilt rather than replayed: the events that filled it
+      // happened while this client was away. Sent only to a player who had already answered, so
+      // an empty list here means exactly that — nothing to show.
+      liveAnswers: mergeLiveAnswers([], p.answers),
     };
   }
 

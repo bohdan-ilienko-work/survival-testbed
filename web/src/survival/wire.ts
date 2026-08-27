@@ -40,9 +40,10 @@ export interface Question {
   options?: { id: number; text: string }[];
   events?: { id: number; text: string }[];
   /**
-   * CHRONO only: the set's years, SHUFFLED as the server shows them. CHRONO is a MATCHING
-   * round — the answer pairs events[i] with a year BY INDEX into this array — so the array
-   * itself is the address space of the answer and never gets reordered on the client.
+   * CHRONO only: the set's years, IN ASCENDING ORDER as the server shows them («хроно повинно
+   * іти по порядку»). CHRONO is a MATCHING round — the answer pairs events[i] with a year BY
+   * INDEX into this array — so the array itself is the address space of the answer and never
+   * gets reordered on the client, sorted or not.
    */
   years?: number[];
   /**
@@ -55,6 +56,22 @@ export interface Question {
   /** The question's sound, `null` when it has none. One URL, unlike the image's two renditions. */
   audioUrl?: string | null;
   deadline?: number;
+}
+
+/**
+ * One player's answer as the OTHER players are shown it, mid-round.
+ *
+ * Only ever delivered to a player who has already answered themselves (private `answersRevealed`
+ * / the `answers` on their own `playerReconnected`), which is the whole reason it can carry the
+ * raw value at all: nobody who could still change their mind is holding one of these.
+ */
+export interface LiveAnswer {
+  playerId: string;
+  name: string;
+  /** The submitted value, in the round's own shape: selection / number / map / chrono */
+  value: unknown;
+  /** ms from the round's start to this answer — the board doubles as a speed board */
+  elapsedMs: number;
 }
 
 /** The two renditions of a question's picture — see {@link Question.imageUrl} */
