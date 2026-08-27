@@ -6,6 +6,7 @@
 // which is exactly what makes `roundStarted` the event that separates two BuyBack windows.
 
 import { asIds, asMiss, asNum, asScores, asTag, asYears } from './guards';
+import { mergeLiveAnswers } from './liveAnswers';
 import type { SurvivalState } from './state';
 import { mergeRoundResultTiebreak, readTiebreak } from './tiebreak';
 import { resumeFromReconnect } from './reconnect';
@@ -45,6 +46,8 @@ export function reduceRound(
         // Belongs to the round that just ended, never to the one starting now.
         roundBuybackUnavailableReason: undefined,
         answeredCount: 0,
+        // the previous round's board, under a question it has nothing to do with
+        liveAnswers: [],
         scores: [],
         correctAnswer: undefined,
         // the previous round's survival threshold would mis-explain this round's eliminations
@@ -62,6 +65,11 @@ export function reduceRound(
 
     case 'answerReceived':
       return { ...state, answeredCount: state.answeredCount + 1 };
+
+    // Addressed to this client alone, and only ever after its own answer is in — see
+    // liveAnswers.ts. The merge is the whole handler: one row per player, arrival order kept.
+    case 'answersRevealed':
+      return { ...state, liveAnswers: mergeLiveAnswers(state.liveAnswers, p.answers) };
 
     case 'roundResult': {
       // Guarded, not trusted: the results table sorts on `rank`, rounds `score` and prints

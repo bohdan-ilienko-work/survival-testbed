@@ -18,6 +18,7 @@
 
 export type {
   LastResult,
+  LiveAnswer,
   LobbyPlayer,
   Question,
   QuestionImage,
@@ -41,6 +42,8 @@ export {
 // the one guard a component needs of its own: the results table reads each player's miss
 // straight off the score line, which is as untrusted as anything else off the wire
 export { asImage, asLastResult, asMiss, asUrl } from './survival/guards';
+// the mid-round board: what the others answered, once this client's own answer is in
+export { describeAnswer } from './survival/liveAnswers';
 export {
   LOBBY_ENDED_TEXT,
   MATCH_IN_PROGRESS_TEXT,

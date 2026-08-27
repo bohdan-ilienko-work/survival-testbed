@@ -553,7 +553,7 @@ stateDiagram-v2
       <tr><td>Стеля раундів</td><td class="num" colspan="2">min(<code>roundsTotal</code> набору, 60) (<code>SURVIVAL_MAX_ROUNDS</code>). Режим кожного раунду задає слот набору; правило «раунд 15 — завжди MAP» лишилось тільки в легасі-селекторі, тобто коли набору на день немає</td></tr>
       <tr><td>Відповідь на раунд</td><td class="num" colspan="2">20 с (<code>SURVIVAL_ROUND_MS</code>) — і для звичайного раунду, і для раптового тайбрейку</td></tr>
       <tr><td>Вікно викупу</td><td class="num" colspan="2">15 с (<code>SURVIVAL_BUYBACK_MS</code>); воно Ж і є паузою між раундами</td></tr>
-      <tr><td>Пауза після звичайного раунду БЕЗ вікна</td><td class="num" colspan="2">10 с (<code>SURVIVAL_ROUND_RESULT_DELAY_MS</code>)</td></tr>
+      <tr><td>Пауза після звичайного раунду БЕЗ вікна</td><td class="num" colspan="2">8 с (<code>SURVIVAL_ROUND_RESULT_DELAY_MS</code>) — фаза ревилу</td></tr>
       <tr><td>Пауза після MAP-раунду БЕЗ вікна</td><td class="num" colspan="2">15 с (<code>SURVIVAL_MAP_RESULT_DELAY_MS</code>) — MAP окрема сцена в Unity</td></tr>
       <tr><td><code>fightStarted</code> → 1-й раунд</td><td class="num" colspan="2">10 с (<code>SURVIVAL_FIGHT_START_DELAY_MS</code>); <b>жодна подія цей дедлайн не несе</b> — просто чекай ~10 с тиші</td></tr>
       <tr><td>Реконект</td><td colspan="2">грейсу <b>немає</b>: обрив ≠ вибування, але раунди йдуть далі і кожен пропущений скориться як «немає відповіді»; повернутись можна будь-коли, поки живий</td></tr>
@@ -618,9 +618,9 @@ stateDiagram-v2
   <div class="scroll-x"><table>
     <thead><tr><th>Режим</th><th>Питання містить</th><th>Відповідь — <code>submitAnswer([...])</code></th><th>Хто вибуває</th></tr></thead>
     <tbody>
-      <tr><td>QUESTION</td><td><code>options: [{id, text}, …]</code> — <b>обʼєкти, не рядки</b>; <code>id</code> = індекс</td><td><code>{type:'selection', optionId: 2}</code> — <code>optionId</code> має бути цілим, інакше відповідь відхилена</td><td>усі, хто неправильно / не встиг. Якщо <b>ВСІ</b> відповіли правильно — вибуває найповільніша група (рангова, за спід-бонусом), а якщо в ній &gt;1 гравця — раптовий тайбрейк. Якщо <b>ВСІ</b> помилились — тайбрейк, після нього лишається лише найкраща за рангом група</td></tr>
-      <tr><td>NUMBER</td><td>текст (числова оцінка)</td><td><code>{type:'number', value: 1492}</code> — нескінченне/NaN <code>value</code> відхиляється і рахується як «не відповів»</td><td><b>плаваюча дельта</b>: раунд лишає 70% когорти, останній збережений гравець задає поріг <code>roundDelta</code>; хто промахнувся більше — вибуває</td></tr>
-      <tr><td>CHRONO</td><td><code>events: [{id, text}, …]</code> — <b>завжди рівно 3</b>, у порядку показу <b>+</b> <code>years: number[]</code> — ті самі 3 роки, <b>ПЕРЕМІШАНІ</b></td><td><code>{type:'chrono', pairs:[2,0,1]}</code> — <code>pairs[i]</code> це <b>ІНДЕКС у масиві <code>years</code></b> для <code>events[i]</code>; <code>-1</code> = не спаровано</td><td>лише ті, хто спарував неправильно. Якщо всі спарували повністю правильно — <b>НЕ вибуває НІХТО</b>, тайбрейку немає, одразу наступний раунд. Якщо ж помилились <b>усі</b>, лоббі не вибиває себе повністю: лишається група з найкращим відсотком</td></tr>
+      <tr><td>QUESTION</td><td><code>options: [{id, text}, …]</code> — <b>обʼєкти, не рядки</b>; <code>id</code> = індекс</td><td><code>{type:'selection', optionId: 2}</code> — <code>optionId</code> має бути цілим, інакше відповідь відхилена</td><td>усі, хто неправильно / не встиг. Якщо <b>ВСІ</b> відповіли правильно — <b>не вибуває НІХТО</b> і тайбрейк <b>не</b> запускається (раніше вибувала найповільніша група, а рівні за часом ішли в раптовий тайбрейк). Якщо <b>ВСІ</b> помилились — тайбрейк, після нього лишається лише найкраща за рангом група</td></tr>
+      <tr><td>NUMBER</td><td>текст (числова оцінка)</td><td><code>{type:'number', value: 1492}</code> — нескінченне/NaN <code>value</code> відхиляється і рахується як «не відповів»</td><td><b>плаваюча дельта</b>: раунд лишає 70% когорти, останній збережений гравець задає поріг <code>roundDelta</code>; хто промахнувся більше — вибуває. <b>Але влучання не ріжеться</b>: гравця, чия відповідь у межах допуску питання (<code>correct</code>, 1% від масштабу), дельта вибити не може — вона витрачає свої місця лише на промахи, а якщо влучили всі, раунд не забирає нікого і тайбрейку не буде</td></tr>
+      <tr><td>CHRONO</td><td><code>events: [{id, text}, …]</code> — <b>завжди рівно 3</b>, у порядку показу <b>+</b> <code>years: number[]</code> — ті самі 3 роки, <b>ЗА ЗРОСТАННЯМ</b></td><td><code>{type:'chrono', pairs:[2,0,1]}</code> — <code>pairs[i]</code> це <b>ІНДЕКС у масиві <code>years</code></b> для <code>events[i]</code>; <code>-1</code> = не спаровано</td><td>лише ті, хто спарував неправильно. Якщо всі спарували повністю правильно — <b>НЕ вибуває НІХТО</b>, тайбрейку немає, одразу наступний раунд. Якщо ж помилились <b>усі</b>, лоббі не вибиває себе повністю: лишається група з найкращим відсотком</td></tr>
       <tr><td>MAP</td><td>текст («Покажи місто X»)</td><td><code>{type:'map', lat: 50.45, lng: 30.52}</code> — нескінченні координати відхиляються</td><td>та сама <b>плаваюча дельта</b>. Тут <code>roundDelta</code> і <code>err</code> — кілометри, а мітка <code>correct</code> (&lt;50 км) на вибування <b>не впливає</b></td></tr>
     </tbody>
   </table></div>
@@ -636,12 +636,13 @@ stateDiagram-v2
       з gRPC-пулу іншої довжини <b>відхиляється</b> — воно несе власну стрічку років і власні
       підписи, тож три з них були б уже іншим питанням, ніж написав редактор. Малювати список усе одно треба за <code>events.length</code>:
       це єдине число, яке точно збігається з довжиною <code>pairs</code>, якої чекає сервер.</p>
-    <p>Роки приїжджають перемішаними — <b>чесно</b>, усі шість перестановок рівноймовірні,
-      включно з тотожною. Не будуй здогадок на «сервер точно не поставить роки по порядку»:
-      така гарантія викидала б одну перестановку з шести, і гравець, який просто ніколи не
-      ставить рядок i на фішку i, вигравав би раунд із п'яти замість одного з шести. Тобто
-      <code>pairs:[0,1,2]</code> — така сама відповідь, як будь-яка інша: правильна рівно в
-      одному раунді з шести, якщо гравець нічого не знає.</p>
+    <p><b>Роки приходять за зростанням</b> — від найдавнішого до найновішого (раніше вони
+      тасувалися). Порядок <code>events</code> лишається довільним, і саме він є задачею:
+      питання в тому, яка подія до якого року, а не в тому, як відсортувати роки. Масив
+      <code>years</code> — це адресний простір відповіді, тому клієнт його не пересортовує:
+      <code>pairs[i]</code> завжди індекс у тому масиві, який прислав сервер. І
+      <code>pairs:[0,1,2]</code> більше не «нейтральна заглушка», а конкретна відповідь «події
+      вже стоять хронологічно».</p>
     <p><strong>Коли відповідь відхиляється.</strong></p>
     <p>Сервер відкидає пару, якщо <code>pairs</code> не масив, його довжина ≠ кількості
       <code>events</code>, є нецілий елемент, індекс поза <code>[-1, years.length-1]</code>
@@ -764,7 +765,7 @@ stateDiagram-v2
       вже відмовним і 15 секунд відмовляло б усім; (4) з раунду не вибув жоден живий
       гравець-<b>людина</b> (лише боти).</p>
     <p>У цих випадках у <code>roundResult</code> усе одно є <code>nextRoundAt</code> (крім
-      випадку, коли бій закінчується), а пауза — звичайні 10 с, або 15 с після MAP.</p>
+      випадку, коли бій закінчується), а пауза — звичайні 8 с, або 15 с після MAP.</p>
   </div>
 
   <div class="note">
@@ -893,6 +894,7 @@ rewardTable: [ { gems, tickets }, … ]                   // що платить
       <tr><td><code>fightStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, players: [{playerId, slot, isBot}]</code> — це урізаний список, не рядки ростера. Повний склад із ботами і слотами прилітає окремим <code>rosterUpdate</code>, який ця подія тригерить</td></tr>
       <tr><td><code>roundStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, mode, question, deadline, durationMs, activePlayers</code> (§6)</td></tr>
       <tr><td><code>answerReceived</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code> — самої відповіді немає</td></tr>
+      <tr><td><code>answersRevealed</code></td><td><span class="tag private">приватна</span></td><td><code>playerId</code> (адресат — звіряй зі своїм), <code>round</code>, <code>answers: [{playerId, name, value, elapsedMs}]</code>. Приходить <b>лише після того, як ти сам відповів</b>: у момент твоєї відповіді — уся дошка, що вже зібралася, далі — по одному рядку на кожну нову відповідь. Мерджити за <code>playerId</code>, чистити на <code>roundStarted</code>. Тому, хто ще не відповів, не надсилається взагалі</td></tr>
       <tr><td><code>roundResult</code></td><td><span class="tag bcast">лоббі</span></td><td><code>roundNumber</code> (<b>НЕ</b> <code>round</code>), <code>mode, scores, eliminated, correctAnswer</code> (<b>НЕ</b> <code>correct</code>) + опційні <code>tiebreakPlayerIds</code>, <code>tiebreakReason</code> (<code>all_wrong | boundary_tie</code> — ЧОМУ грався додатковий), <code>roundDelta</code>, <code>nextRoundAt</code>, <code>buybackUnavailableReason</code> (байбека не буде — пауза на 5 с довша) (§6)</td></tr>
       <tr><td><code>tiebreakPending</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, reason, mode, playerIds, startsAt, maxIterations, roundReveal:{mode, correctAnswer, scores}</code> — пауза-розкриття перед додатковим питанням (3 с, <code>SURVIVAL_TIEBREAK_REVEAL_MS</code>): покажи відповіді раунду з <code>roundReveal</code> і рахуй до <code>startsAt</code>. Відповіді ще НЕ приймаються — вікно відкриє <code>tiebreakStarted</code></td></tr>
       <tr><td><code>tiebreakStarted</code></td><td><span class="tag bcast">лоббі</span></td><td><code>round, iteration, reason, mode, playerIds, question, deadline, durationMs, maxIterations</code> — <code>deadline</code> тепер і top-level, дзеркалом <code>roundStarted</code> (раніше жив лише всередині <code>question</code>)</td></tr>
@@ -904,7 +906,7 @@ rewardTable: [ { gems, tickets }, … ]                   // що платить
       <tr><td><code>ticketsUpdated</code></td><td><span class="tag private">приватна</span></td><td><code>{playerId, balance, reason, delta?}</code> (§8). Адресується <b>по <code>playerId</code></b>, не по лоббі; <code>delta</code> просто <b>відсутнє</b>, коли рух нульовий або невідомий</td></tr>
       <tr><td><code>buyBackSuccess</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, name, round</code> — імʼя, щоб екран сказав ХТО повернувся без гонки з ростером; ціни нема (гаманець гравця)</td></tr>
       <tr><td><code>playerDisconnected</code></td><td><span class="tag bcast">лоббі</span></td><td><code>playerId, round</code></td></tr>
-      <tr><td><code>playerReconnected</code></td><td><span class="tag private">приватна</span></td><td><code>playerId, round, state, question?, deadline?, answered?</code> — три останні лише коли для гравця відкрите питання. Іде <b>лише тому, хто перепідключився</b>, на відміну від <code>playerDisconnected</code></td></tr>
+      <tr><td><code>playerReconnected</code></td><td><span class="tag private">приватна</span></td><td><code>playerId, round, state, question?, deadline?, answered?, answers?</code> — останні лише коли для гравця відкрите питання; <code>answers</code> (та сама дошка, що в <code>answersRevealed</code>) приходить, тільки якщо цей гравець уже відповів. Іде <b>лише тому, хто перепідключився</b>, на відміну від <code>playerDisconnected</code></td></tr>
       <tr><td><code>lobbyFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>lobbyId, winnerId, totalRounds, rewards: [{playerId, rank, gems, tickets}], rewardTable: [{gems, tickets}, …]</code>. <code>rewards</code> — що реально виплачено кожному ГРАВЦЮ (лише люди), <code>rewardTable</code> — що платить кожне МІСЦЕ (індекс 0 = 1-ше); саме таблиця дозволяє підписати ранг бота, якому виплат не буде (§8)</td></tr>
       <tr><td><code>fightFinished</code></td><td><span class="tag bcast">лоббі</span></td><td><code>fightId, winnerId, totalRounds, reason</code>, де <code>reason</code> ∈ <code>last_player_standing | question_pool_exhausted | round_cap_reached | lobby_closed</code>. Це <b>технічний</b> фініш бою — окрема подія від <code>lobbyFinished</code>, який є підсумком лоббі з виплатами; при звичайному фініші (<code>last_player_standing</code>) лоббі емітить свій <b>раніше</b>; на аварійних причинах порядок зворотний</td></tr>
       <tr><td><code>lobbyCancelled</code></td><td><span class="tag bcast">лоббі</span></td><td>лише <code>{lobbyId}</code>; нагород не несе ніколи</td></tr>
@@ -969,7 +971,7 @@ rewardTable: [ { gems, tickets }, … ]                   // що платить
       порожній <code>flag</code> як ознаку бота — у ботів тепер реальна випадкова країна.
       Єдина ознака — <code>isBot</code>.</li>
     <li><b>CHRONO більше не порядок, а спарування — і подій рівно 3.</b> Питання несе
-      <code>events</code> ТА перемішані <code>years</code>, обидва завжди довжиною 3,
+      <code>events</code> ТА впорядковані за зростанням <code>years</code>, обидва довжиною 3,
       відповідь — <code>{type:'chrono', pairs:[…]}</code> тієї ж довжини, де
       <code>pairs[i]</code> це індекс у <code>years</code>. Не зашивай четвертий рядок. І не
       надсилай <code>pairs:[0,1,2]</code> «про всяк випадок» як нейтральну заглушку — це

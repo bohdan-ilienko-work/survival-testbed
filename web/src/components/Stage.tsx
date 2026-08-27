@@ -13,6 +13,7 @@ import { humansBotsLabel } from './peopleWords';
 import { untilText } from './timeWords';
 import { QuestionView } from './QuestionView';
 import { EliminatedNotice } from './EliminatedNotice';
+import { LiveAnswers } from './LiveAnswers';
 import { ResultsView } from './ResultsView';
 import { TiebreakBadge } from './TiebreakBadge';
 
@@ -166,6 +167,8 @@ export function Stage({
           </div>
         ))}
 
+      {/* Under the question: the board exists only for a player who has already answered */}
+      {state.step === 'question' && <LiveAnswers state={state} me={playerId} />}
       {/* Above the board it explains: a knocked-out player has to know whether an offer is
           coming before they read a table of who survived. */}
       <EliminatedNotice state={state} />
