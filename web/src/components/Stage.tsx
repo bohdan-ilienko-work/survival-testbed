@@ -175,15 +175,22 @@ export function Stage({
 
       {state.step === 'results' && <ResultsView state={state} me={playerId} now={now} />}
 
-      {state.step === 'buyback' && (
-        <BuyBackPanel
-          state={state}
-          now={now}
-          busy={busy}
-          onBuyBack={onBuyBack}
-          onQuote={onQuote}
-        />
-      )}
+      {/* The reveal outranks the offer: the server's one rule for every pause is «спершу повний
+          ревил» — so until revealEndsAt the eliminated player reads the same board as everyone
+          else, and the buy screen gets the REST of the window. This is the server's boundary,
+          not a local timer: without the field the window opens on the panel at once, as before. */}
+      {state.step === 'buyback' &&
+        (state.revealEndsAt !== undefined && now < state.revealEndsAt ? (
+          <ResultsView state={state} me={playerId} now={now} />
+        ) : (
+          <BuyBackPanel
+            state={state}
+            now={now}
+            busy={busy}
+            onBuyBack={onBuyBack}
+            onQuote={onQuote}
+          />
+        ))}
 
       {state.step === 'finished' && (
         <FinishView state={state} me={playerId} busy={busy} onRestart={onRestart} />
