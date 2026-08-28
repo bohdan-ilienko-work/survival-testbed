@@ -63,11 +63,13 @@ export interface SurvivalState {
    */
   nextRoundAt?: number;
   /**
-   * ABSOLUTE unix ms where the REVEAL phase of the pause ends and the «до наступного раунду»
-   * countdown begins — roundResult.revealEndsAt. The pause after an ordinary round is now TWO
-   * consecutive phases: the board with no timer, then a countdown to `nextRoundAt`. Absent
-   * after MAP, on a BuyBack-window round and on an older server — then the pause is one phase
-   * and the countdown runs the whole way, exactly as before.
+   * ABSOLUTE unix ms where the REVEAL phase of the pause ends — roundResult.revealEndsAt, one
+   * rule for every pause: the reveal runs first and in full, then whatever the pause is for
+   * takes the screen. On a plain pause that is the «до наступного раунду» countdown to
+   * `nextRoundAt`; on a BuyBack-window round it is the buy screen, with `nextRoundAt` still
+   * the window's closesAt. Always strictly less than `nextRoundAt`. Absent after MAP, when
+   * the pause is too short to hold a full reveal, and on an older server — then the pause is
+   * one phase, exactly as before.
    */
   revealEndsAt?: number;
   myAnswer?: unknown;
