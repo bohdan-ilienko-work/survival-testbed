@@ -42,6 +42,7 @@ export function reduceRound(
         deadline: p.deadline,
         // the pause this instant measured is over — the round it announced is the one starting
         nextRoundAt: undefined,
+        revealEndsAt: undefined,
         myAnswer: undefined,
         // Belongs to the round that just ended, never to the one starting now.
         roundBuybackUnavailableReason: undefined,
@@ -97,6 +98,9 @@ export function reduceRound(
         // that opens none (≤1 active left, round cap, gate unpassable) it is the only
         // countdown the pause has, so it must not depend on any buyback event arriving.
         nextRoundAt: asNum(p.nextRoundAt),
+        // The phase boundary of that pause. Present only when the two-phase split applies —
+        // see the field's own doc in state.ts.
+        revealEndsAt: asNum(p.revealEndsAt),
         eliminated,
         iAmEliminated: state.iAmEliminated || iAmOut,
         // Present only when the round refused a window to everyone it knocked out.
@@ -123,6 +127,7 @@ export function reduceRound(
         correctAnswer: 'correctAnswer' in reveal ? reveal.correctAnswer : state.correctAnswer,
         deadline: undefined,
         nextRoundAt: undefined,
+        revealEndsAt: undefined,
         tiebreak: readTiebreak(p, 'pending'),
       };
     }
@@ -150,6 +155,7 @@ export function reduceRound(
         // a tiebreak interrupts the pause — its question must not share the screen with a
         // «наступний раунд» countdown that no longer holds
         nextRoundAt: undefined,
+        revealEndsAt: undefined,
         myAnswer: undefined,
         // Belongs to the round that just ended, never to the one starting now.
         roundBuybackUnavailableReason: undefined,
