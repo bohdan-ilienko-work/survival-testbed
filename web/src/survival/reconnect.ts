@@ -49,5 +49,7 @@ export function resumeFromReconnect(state: SurvivalState, p: any): SurvivalState
     deadline: undefined,
     // null = the server says nothing is pending; undefined = an older build that never says
     nextRoundAt: p.nextRoundAt === null ? undefined : asNum(p.nextRoundAt) ?? state.nextRoundAt,
+    // the same split roundResult carries; null = the running pause has no reveal phase
+    revealEndsAt: asNum(p.revealEndsAt),
   };
 }

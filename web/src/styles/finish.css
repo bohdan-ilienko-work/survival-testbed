@@ -62,6 +62,9 @@
   font-size: 28px; font-weight: 700; color: var(--ok); margin: var(--sp-1) 0 var(--sp-2);
   font-variant-numeric: tabular-nums;
 }
+/* The reveal phase of the two-phase pause: same slot on the screen, but it is deliberately NOT
+   a timer — quieter and unnumbered, so «читай дошку» and «рахуй секунди» never look alike. */
+.countdown.reveal { font-size: 16px; font-weight: 600; color: var(--muted); }
 
 /* The lost-connection banner: the «Зайти заново» button is the point of it, so it is pinned to
    the far end of the row and the text is allowed to take whatever is left. */

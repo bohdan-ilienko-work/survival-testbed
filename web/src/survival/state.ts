@@ -62,6 +62,14 @@ export interface SurvivalState {
    * «наступний раунд через 0 с» ticking under the live question.
    */
   nextRoundAt?: number;
+  /**
+   * ABSOLUTE unix ms where the REVEAL phase of the pause ends and the «до наступного раунду»
+   * countdown begins — roundResult.revealEndsAt. The pause after an ordinary round is now TWO
+   * consecutive phases: the board with no timer, then a countdown to `nextRoundAt`. Absent
+   * after MAP, on a BuyBack-window round and on an older server — then the pause is one phase
+   * and the countdown runs the whole way, exactly as before.
+   */
+  revealEndsAt?: number;
   myAnswer?: unknown;
   answeredCount: number;
   /**

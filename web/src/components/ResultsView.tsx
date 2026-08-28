@@ -71,12 +71,20 @@ export function ResultsView({ state, me, now }: { state: SurvivalState; me?: str
       {/* C1: the server's own absolute instant of the next roundStarted. On a round that opened
           a BuyBack window it EQUALS the window's closesAt (the window IS the pause); on one that
           opened none this is the only countdown the pause has. `undefined` = an older server
-          that never said — then there is nothing honest to count. */}
-      {state.nextRoundAt !== undefined && (
-        <p className="countdown">
-          наступний раунд через {Math.max(0, Math.ceil((state.nextRoundAt - now) / 1000))} с
-        </p>
-      )}
+          that never said — then there is nothing honest to count.
+
+          With `revealEndsAt` the pause is TWO phases: while the reveal runs the board carries
+          NO round timer — that is the point of the phase — and only past the boundary does the
+          «до наступного раунду» countdown appear. Without it (MAP, a BuyBack window, an older
+          server) the countdown runs the whole pause, exactly as before. */}
+      {state.nextRoundAt !== undefined &&
+        (state.revealEndsAt !== undefined && now < state.revealEndsAt ? (
+          <p className="countdown reveal">дивись, хто як відповів</p>
+        ) : (
+          <p className="countdown">
+            до наступного раунду: {Math.max(0, Math.ceil((state.nextRoundAt - now) / 1000))} с
+          </p>
+        ))}
 
       {/* WHY this board looks the way it does. A sudden death is not a round — it consumes no
           round number and emits no `roundStarted` — so without this line the player sees an
