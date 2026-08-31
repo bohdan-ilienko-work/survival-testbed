@@ -156,6 +156,9 @@
   border: 1px solid var(--warn-line); border-radius: 10px;
   background: var(--warn-soft); color: var(--warn);
 }
+/* Dimmed by ALPHA, not by a different hue: it is the same family of news as «ти вибув»,
+   one notch quieter, because it happened to someone else. */
+.buyback-note { opacity: .72; }
 .buyback-note b { color: var(--warn); }
 
 .tiebreak-note {

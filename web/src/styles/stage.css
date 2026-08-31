@@ -116,7 +116,10 @@ main > * { min-width: 0; }
 /* Sits above the results table: whether an offer is coming has to be read before the list of
    who survived. `.final` is the version with no way back — a different thing from a window
    that has simply not opened yet, and it must not look like one. */
-.panel.eliminated h2 { font-size: 18px; }
+/* «Ти вибув» is YELLOW, and the buy-back line beside it is dimmed — the two states must not
+   read alike: one is news about ME (act on it: buy back, or watch), the other is news about
+   somebody else (the roster grew, nothing to do). Matching the client's own rule. */
+.panel.eliminated h2 { font-size: 18px; color: var(--warn); }
 .panel.eliminated .hint.small { font-size: 12px; color: var(--muted); }
 .panel.eliminated.final {
   border-color: var(--bad-line); background: var(--bad-soft);
