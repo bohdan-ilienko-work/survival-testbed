@@ -84,6 +84,10 @@ export function reduceLobby(state: SurvivalState, name: string, p: any): Surviva
         // How long until the first question. Absent on an older server — then there is simply
         // no countdown, which is honest; guessing the number is what the clients used to do.
         firstRoundAt: startsIn(p.fightStartDelayMs),
+        // What the match pays per rank, for the field it ACTUALLY starts with — bots included.
+        // Everything the booking screen showed was priced on a human-only roster, so this is
+        // the first honest table of the match; NO_MATCH cleared the previous one just above.
+        rewardTable: asRewardTable(p.rewardTable),
       };
 
     case 'playerKickedAfterDisconnect':
