@@ -71,11 +71,15 @@ export function ClientStateTable({
             </td>
           </tr>
           <tr>
-            <td>нагороди (фінал)</td>
+            <td>нагороди</td>
             <td>
-              {state.rewards === undefined
-                ? 'не знаю — сервер не прислав'
-                : `${state.rewards.length} рядків`}
+              {/* The table arrives at fightStarted, priced on the BOT-FILLED field — the booking
+                  screen could only price the humans. Shown beside the payouts so a stale table
+                  is visible as a mismatch rather than guessed at. */}
+              таблиця: {state.rewardTable === undefined ? '—' : `${state.rewardTable.length} рангів`}
+              {' · '}
+              виплати:{' '}
+              {state.rewards === undefined ? 'не знаю — сервер не прислав' : `${state.rewards.length} рядків`}
             </td>
           </tr>
           <tr>
